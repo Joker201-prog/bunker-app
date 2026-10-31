@@ -1,19 +1,27 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { KIND_ICON, KIND_LABEL, KIND_ORDER } from '../data/cards';
+import { KIND_LABEL, KIND_ORDER } from '../data/cards';
 import type { CardKind, Player } from '../game/types';
-import { colors, spacing, valueColor } from '../theme';
+import { colors, fonts, radius, spacing, valueColor } from '../theme';
 
 interface Props {
   player: Player;
-  /** Kinds the viewer may reveal right now (only for the human's own panel). */
+  /** Карты, которые можно раскрыть сейчас (только для своей руки). */
   revealable?: CardKind[];
   onReveal?: (kind: CardKind) => void;
-  /** Show every card, even hidden ones (the viewer's own hand). */
+  /** Показывать все карты, включая скрытые (своя рука или выбывший игрок). */
   showAll?: boolean;
   highlight?: boolean;
   onPress?: () => void;
-  footer?: React.ReactNode;
+  /** Свернуть до шапки: имя и число открытых карт. */
+  compact?: boolean;
+  /** Показывать только раскрытые карты (чужие досье). */
+  onlyOpen?: boolean;
+}
+
+function dossierNumber(id: string): string {
+  const n = id === 'human' ? 1 : parseInt(id.replace(/\D/g, ''), 10) + 1;
+  return String(n).padStart(2, '0');
 }
 
 export function PlayerCards({
@@ -23,55 +31,73 @@ export function PlayerCards({
   showAll,
   highlight,
   onPress,
-  footer,
+  compact,
+  onlyOpen,
 }: Props) {
   const Wrapper: any = onPress ? Pressable : View;
+  const openCount = KIND_ORDER.filter((k) => player.revealed[k]).length;
+  const kinds = onlyOpen ? KIND_ORDER.filter((k) => player.revealed[k]) : KIND_ORDER;
+
   return (
     <Wrapper
       onPress={onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
       style={[styles.panel, highlight && styles.highlight, !player.alive && styles.dead]}
     >
       <View style={styles.header}>
-        <Text style={styles.name}>
+        <Text style={styles.number}>№{dossierNumber(player.id)}</Text>
+        <Text style={styles.name} numberOfLines={1}>
           {player.name}
           {player.isHuman ? ' (вы)' : ''}
         </Text>
-        <Text style={[styles.status, { color: player.alive ? colors.good : colors.bad }]}>
-          {player.alive ? 'в игре' : 'исключён'}
-        </Text>
+        {!player.alive ? (
+          <Text style={styles.out}>за дверью</Text>
+        ) : (
+          <Text style={styles.count}>
+            {openCount}/{KIND_ORDER.length}
+          </Text>
+        )}
       </View>
-      <View style={styles.grid}>
-        {KIND_ORDER.map((kind) => {
-          const card = player.cards[kind];
-          const open = player.revealed[kind];
-          const visible = open || showAll;
-          const canReveal = revealable.includes(kind);
-          const Chip: any = canReveal ? Pressable : View;
-          return (
-            <Chip
-              key={kind}
-              onPress={canReveal ? () => onReveal && onReveal(kind) : undefined}
-              style={[
-                styles.chip,
-                visible && { borderColor: valueColor(card.value) },
-                showAll && !open && styles.chipHidden,
-                canReveal && styles.chipActive,
-              ]}
-            >
-              <Text style={styles.chipKind}>
-                {KIND_ICON[kind]} {KIND_LABEL[kind]}
-                {showAll && !open ? ' · скрыто' : ''}
-              </Text>
-              <Text style={[styles.chipTitle, !visible && styles.chipLocked]}>
-                {visible ? card.title : '???'}
-              </Text>
-              {visible && card.note ? <Text style={styles.chipNote}>{card.note}</Text> : null}
-              {canReveal ? <Text style={styles.tapHint}>нажмите, чтобы раскрыть</Text> : null}
-            </Chip>
-          );
-        })}
-      </View>
-      {footer}
+
+      {!compact && onlyOpen && kinds.length === 0 && (
+        <Text style={styles.empty}>Пока ничего о себе не раскрыл</Text>
+      )}
+      {!compact && kinds.length > 0 && (
+        <View style={styles.grid}>
+          {kinds.map((kind) => {
+            const card = player.cards[kind];
+            const open = player.revealed[kind];
+            const visible = open || showAll;
+            const canReveal = revealable.includes(kind);
+            const Tile: any = canReveal ? Pressable : View;
+            return (
+              <Tile
+                key={kind}
+                onPress={canReveal ? () => onReveal && onReveal(kind) : undefined}
+                accessibilityRole={canReveal ? 'button' : undefined}
+                style={[
+                  styles.tile,
+                  visible && { borderLeftColor: valueColor(card.value) },
+                  !visible && styles.tileClosed,
+                  showAll && !open && styles.tileSecret,
+                  canReveal && styles.tileAction,
+                ]}
+              >
+                <Text style={styles.kind}>{KIND_LABEL[kind]}</Text>
+                <Text style={[styles.title, !visible && styles.titleClosed]}>
+                  {visible ? card.title : 'засекречено'}
+                </Text>
+                {visible && card.note ? <Text style={styles.note}>{card.note}</Text> : null}
+                {canReveal ? (
+                  <Text style={styles.action}>Раскрыть</Text>
+                ) : showAll && !open && player.alive ? (
+                  <Text style={styles.secretHint}>видите только вы</Text>
+                ) : null}
+              </Tile>
+            );
+          })}
+        </View>
+      )}
     </Wrapper>
   );
 }
@@ -79,32 +105,38 @@ export function PlayerCards({
 const styles = StyleSheet.create({
   panel: {
     backgroundColor: colors.panel,
-    borderRadius: 14,
+    borderRadius: radius.md,
     padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginBottom: spacing.md,
-  },
-  highlight: { borderColor: colors.accent, borderWidth: 2 },
-  dead: { opacity: 0.55 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  name: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  status: { fontSize: 13, fontWeight: '600' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    flexGrow: 1,
-    flexBasis: '47%',
-    backgroundColor: colors.panelAlt,
-    borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
+    borderColor: colors.panel,
   },
-  chipHidden: { borderStyle: 'dashed', opacity: 0.75 },
-  chipActive: { borderColor: colors.accent, borderWidth: 2, opacity: 1 },
-  chipKind: { color: colors.muted, fontSize: 11, marginBottom: 2 },
-  chipTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  chipLocked: { color: colors.muted },
-  chipNote: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  tapHint: { color: colors.accent, fontSize: 11, marginTop: 4 },
+  highlight: { borderColor: colors.amber, backgroundColor: colors.amberDeep },
+  dead: { opacity: 0.5 },
+  header: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  number: { color: colors.amber, fontFamily: fonts.mono, fontSize: 13 },
+  name: { flex: 1, color: colors.text, fontFamily: fonts.bold, fontSize: 18 },
+  count: { color: colors.muted, fontFamily: fonts.mono, fontSize: 13 },
+  out: { color: colors.bad, fontFamily: fonts.body, fontSize: 13 },
+  empty: { color: colors.neutral, fontFamily: fonts.body, fontSize: 14, marginTop: spacing.sm },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  tile: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    backgroundColor: colors.raised,
+    borderRadius: radius.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.line,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm + 2,
+  },
+  tileClosed: { backgroundColor: colors.bg },
+  tileSecret: { backgroundColor: colors.bg },
+  tileAction: { borderWidth: 1, borderColor: colors.amber, borderLeftColor: colors.amber },
+  kind: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 },
+  title: { color: colors.text, fontFamily: fonts.bold, fontSize: 15, marginTop: 2, lineHeight: 19 },
+  titleClosed: { color: colors.neutral, fontFamily: fonts.body },
+  note: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, marginTop: 3, lineHeight: 16 },
+  action: { color: colors.amber, fontFamily: fonts.bold, fontSize: 13, marginTop: 6 },
+  secretHint: { color: colors.neutral, fontFamily: fonts.body, fontSize: 11, marginTop: 4 },
 });

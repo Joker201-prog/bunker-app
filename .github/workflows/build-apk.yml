@@ -31,6 +31,11 @@ jobs:
           cp -r src app/src
           cp App.tsx app/App.tsx
           cp app.config.overrides.json app/
+          mkdir -p app/assets && cp -r assets/. app/assets/
+
+      - name: Install fonts and splash
+        working-directory: app
+        run: npx expo install expo-font expo-splash-screen @expo-google-fonts/russo-one @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
 
       - name: Configure app.json
         working-directory: app
@@ -40,6 +45,9 @@ jobs:
             const cfg = JSON.parse(fs.readFileSync("app.json", "utf8"));
             const o = JSON.parse(fs.readFileSync("app.config.overrides.json", "utf8"));
             cfg.expo = { ...cfg.expo, ...o.expo, android: { ...(cfg.expo.android || {}), ...o.expo.android } };
+            const splash = ["expo-splash-screen", { image: "./assets/splash-icon.png", imageWidth: 200, resizeMode: "contain", backgroundColor: "#16181b" }];
+            cfg.expo.plugins = (cfg.expo.plugins || []).filter((p) => (Array.isArray(p) ? p[0] : p) !== "expo-splash-screen");
+            cfg.expo.plugins.push(splash);
             fs.writeFileSync("app.json", JSON.stringify(cfg, null, 2));
             console.log(JSON.stringify(cfg, null, 2));
           '

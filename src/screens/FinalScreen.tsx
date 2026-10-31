@@ -1,15 +1,22 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
+import { HazardStripe } from '../components/HazardStripe';
 import { PlayerCards } from '../components/PlayerCards';
 import { TAG_LABEL } from '../data/cards';
 import type { GameState } from '../game/types';
-import { colors, spacing } from '../theme';
+import { colors, fonts, radius, spacing } from '../theme';
 
 interface Props {
   state: GameState;
   onRestart: () => void;
 }
+
+const VERDICT = {
+  thrive: { word: 'Выжили и процветают', color: colors.good },
+  survive: { word: 'Выжили', color: colors.amber },
+  fall: { word: 'Бункер пал', color: colors.bad },
+};
 
 export function FinalScreen({ state, onRestart }: Props) {
   const report = state.final;
@@ -17,76 +24,70 @@ export function FinalScreen({ state, onRestart }: Props) {
   const survivors = state.players.filter((p) => report.survivors.includes(p.id));
   const human = state.players.find((p) => p.isHuman);
   const humanIn = !!human && report.survivors.includes(human.id);
-  const color =
-    report.verdict === 'thrive' ? colors.good : report.verdict === 'survive' ? colors.accent : colors.bad;
+  const v = VERDICT[report.verdict];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={[styles.verdict, { color }]}>
-        {report.verdict === 'thrive' ? 'Победа' : report.verdict === 'survive' ? 'Выжили' : 'Поражение'}
-      </Text>
+      <HazardStripe />
+      <Text style={styles.kicker}>{state.catastrophe.title}</Text>
+      <Text style={[styles.verdict, { color: v.color }]}>{v.word}</Text>
       <Text style={styles.headline}>{report.headline}</Text>
       <Text style={styles.personal}>
-        {humanIn ? 'Вы остались в бункере и пережили катастрофу вместе с группой.' : 'Вы не попали в бункер.'}
+        {humanIn ? 'Вы были внутри и пережили катастрофу вместе с группой.' : 'Вы остались за дверью.'}
       </Text>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Катастрофа: {state.catastrophe.title}</Text>
-        <Text style={styles.text}>Нужно было закрыть темы:</Text>
-        {state.catastrophe.needs.map((n) => (
-          <Text
-            key={n}
-            style={[styles.need, { color: report.covered.includes(n) ? colors.good : colors.bad }]}
-          >
-            {report.covered.includes(n) ? '✔' : '✖'} {TAG_LABEL[n]}
-          </Text>
-        ))}
+      <View style={styles.panel}>
+        <Text style={styles.subhead}>Что требовала катастрофа</Text>
+        {state.catastrophe.needs.map((n) => {
+          const ok = report.covered.includes(n);
+          return (
+            <View key={n} style={styles.needRow}>
+              <View style={[styles.mark, { backgroundColor: ok ? colors.good : colors.bad }]} />
+              <Text style={styles.needText}>{TAG_LABEL[n]}</Text>
+              <Text style={[styles.needState, { color: ok ? colors.good : colors.bad }]}>
+                {ok ? 'было' : 'не было'}
+              </Text>
+            </View>
+          );
+        })}
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Что произошло</Text>
+      <View style={styles.panel}>
+        <Text style={styles.subhead}>Как это было</Text>
         {report.lines.map((line, i) => (
-          <Text key={i} style={styles.text}>
-            • {line}
+          <Text key={i} style={styles.line}>
+            {line}
           </Text>
         ))}
         <Text style={styles.score}>
-          Очки группы: {report.score} (ориентир для выживания: {Math.round(report.base * 0.8)}+)
+          Очки группы: {report.score}. Для выживания нужно от {Math.round(report.base * 0.8)}.
         </Text>
       </View>
 
-      <Text style={styles.section}>Выжившие</Text>
+      <Text style={styles.section}>Кто был внутри</Text>
       {survivors.map((p) => (
         <PlayerCards key={p.id} player={p} showAll />
       ))}
 
-      <Button label="Сыграть снова" onPress={onRestart} style={{ marginVertical: spacing.lg }} />
+      <Button label="Сыграть ещё раз" onPress={onRestart} style={styles.restart} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, paddingTop: 48 },
-  verdict: { fontSize: 34, fontWeight: '800', textAlign: 'center' },
-  headline: {
-    color: colors.text,
-    fontSize: 17,
-    textAlign: 'center',
-    marginVertical: spacing.md,
-    lineHeight: 24,
-  },
-  personal: { color: colors.muted, textAlign: 'center', marginBottom: spacing.lg },
-  card: {
-    backgroundColor: colors.panel,
-    borderRadius: 14,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  cardTitle: { color: colors.accent, fontWeight: '700', fontSize: 16, marginBottom: spacing.sm },
-  text: { color: colors.text, fontSize: 14, lineHeight: 21, marginBottom: 4 },
-  need: { fontSize: 15, marginTop: 2 },
-  score: { color: colors.muted, marginTop: spacing.sm, fontSize: 13 },
-  section: { color: colors.text, fontSize: 18, fontWeight: '700', marginVertical: spacing.md },
+  container: { paddingHorizontal: spacing.lg, paddingTop: 56, paddingBottom: spacing.xxl },
+  kicker: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, marginTop: spacing.xxl },
+  verdict: { fontFamily: fonts.display, fontSize: 40, lineHeight: 46, marginTop: spacing.xs },
+  headline: { color: colors.text, fontFamily: fonts.body, fontSize: 18, lineHeight: 26, marginTop: spacing.md },
+  personal: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, marginTop: spacing.sm, marginBottom: spacing.xl },
+  panel: { backgroundColor: colors.panel, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  subhead: { color: colors.muted, fontFamily: fonts.bold, fontSize: 13, marginBottom: spacing.sm },
+  needRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 4 },
+  mark: { width: 8, height: 8, borderRadius: 1 },
+  needText: { flex: 1, color: colors.text, fontFamily: fonts.body, fontSize: 16 },
+  needState: { fontFamily: fonts.bold, fontSize: 14 },
+  line: { color: colors.text, fontFamily: fonts.body, fontSize: 15, lineHeight: 22, marginBottom: spacing.sm },
+  score: { color: colors.muted, fontFamily: fonts.mono, fontSize: 13, marginTop: spacing.xs },
+  section: { color: colors.text, fontFamily: fonts.display, fontSize: 18, marginTop: spacing.lg, marginBottom: spacing.sm },
+  restart: { marginTop: spacing.lg },
 });
