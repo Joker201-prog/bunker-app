@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Убежище",
+    "slug": "ubezhishe",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0e1210",
+    "android": {
+      "package": "ru.ubezhishe.bunker",
+      "versionCode": 1
+    }
+  }
+}
