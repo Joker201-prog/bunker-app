@@ -35,14 +35,20 @@ export const images = {
   tape: require('../assets/ui/tape.png'),
   photos: {
     m: [
-      require('../assets/ui/photo_m0.jpg'),
-      require('../assets/ui/photo_m1.jpg'),
-      require('../assets/ui/photo_m2.jpg'),
+      require('../assets/ui/avatar_m0.jpg'),
+      require('../assets/ui/avatar_m1.jpg'),
+      require('../assets/ui/avatar_m2.jpg'),
+      require('../assets/ui/avatar_m3.jpg'),
+      require('../assets/ui/avatar_m4.jpg'),
+      require('../assets/ui/avatar_m5.jpg'),
     ],
     f: [
-      require('../assets/ui/photo_f0.jpg'),
-      require('../assets/ui/photo_f1.jpg'),
-      require('../assets/ui/photo_f2.jpg'),
+      require('../assets/ui/avatar_f0.jpg'),
+      require('../assets/ui/avatar_f1.jpg'),
+      require('../assets/ui/avatar_f2.jpg'),
+      require('../assets/ui/avatar_f3.jpg'),
+      require('../assets/ui/avatar_f4.jpg'),
+      require('../assets/ui/avatar_f5.jpg'),
     ],
   },
 };

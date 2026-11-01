@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 2 },
   },
-  photo: { width: 78, height: 94 },
+  photo: { width: 84, height: 101 },
   headText: { flex: 1, paddingTop: 2 },
   number: {
     fontFamily: fonts.display,

@@ -199,9 +199,6 @@ def tape(w=900, h=150):
 
 wood()
 paper()
-for i in range(3):
-    silhouette("m", i)
-    silhouette("f", i)
 paperclip()
 tape()
 print("ok", sorted(os.listdir(OUT)))

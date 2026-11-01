@@ -84,6 +84,9 @@ export interface Participant {
 
 export const DEFAULT_DISCUSSION_SECONDS = 60;
 
+/** Сколько аватаров каждого пола есть в приложении (assets/ui/avatar_m*.jpg, avatar_f*.jpg). */
+export const AVATARS_PER_SEX = 6;
+
 /** Раздаёт карты участникам и создаёт партию. */
 export function createGame(
   participants: Participant[],
@@ -104,7 +107,13 @@ export function createGame(
     special: makeDeck(SPECIALS),
   };
 
-  const players: Player[] = participants.map((part, i) => {
+  // Аватары раздаются из перемешанной колоды отдельно для мужчин и женщин,
+  // поэтому в партии они не повторяются, пока хватает портретов.
+  const avatarDeck = {
+    m: makeDeck(Array.from({ length: AVATARS_PER_SEX }, (_, i) => i)),
+    f: makeDeck(Array.from({ length: AVATARS_PER_SEX }, (_, i) => i)),
+  };
+  const players: Player[] = participants.map((part) => {
     const male = part.male ?? chance(0.5);
     const cards = {
       profession: draw.profession(),
@@ -119,7 +128,7 @@ export function createGame(
       id: part.id,
       name: part.name,
       isHuman: part.isHuman,
-      photo: `${male ? 'm' : 'f'}${(i + Math.floor(rng.next() * 3)) % 3}`,
+      photo: `${male ? 'm' : 'f'}${avatarDeck[male ? 'm' : 'f']()}`,
       alive: true,
       cards,
       revealed: {
