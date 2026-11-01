@@ -35,7 +35,7 @@ jobs:
 
       - name: Install fonts and splash
         working-directory: app
-        run: npx expo install expo-font expo-splash-screen react-native-safe-area-context @expo-google-fonts/russo-one @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
+        run: npx expo install expo-font expo-splash-screen react-native-safe-area-context @expo-google-fonts/oswald @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
 
       - name: Configure app.json
         working-directory: app
@@ -45,7 +45,7 @@ jobs:
             const cfg = JSON.parse(fs.readFileSync("app.json", "utf8"));
             const o = JSON.parse(fs.readFileSync("app.config.overrides.json", "utf8"));
             cfg.expo = { ...cfg.expo, ...o.expo, android: { ...(cfg.expo.android || {}), ...o.expo.android } };
-            const splash = ["expo-splash-screen", { image: "./assets/splash-icon.png", imageWidth: 200, resizeMode: "contain", backgroundColor: "#16181b" }];
+            const splash = ["expo-splash-screen", { image: "./assets/splash-icon.png", imageWidth: 200, resizeMode: "contain", backgroundColor: "#2b1d13" }];
             cfg.expo.plugins = (cfg.expo.plugins || []).filter((p) => (Array.isArray(p) ? p[0] : p) !== "expo-splash-screen");
             cfg.expo.plugins.push(splash);
             fs.writeFileSync("app.json", JSON.stringify(cfg, null, 2));

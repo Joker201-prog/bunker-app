@@ -1,7 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Stage } from '../game/types';
-import { colors, fonts, spacing } from '../theme';
+import { colors, fonts, images, spacing } from '../theme';
 
 const STEPS: { stage: Stage; label: string }[] = [
   { stage: 'table', label: 'Стол' },
@@ -9,42 +9,54 @@ const STEPS: { stage: Stage; label: string }[] = [
   { stage: 'voting', label: 'Голосование' },
 ];
 
-/** Раунды точками и три этапа раунда — реальная последовательность, поэтому с номерами. */
-export function StageBar({
+/** Шапка партии: название, кнопка выхода, номер раунда и три этапа раунда. */
+export function GameHeader({
   round,
   totalRounds,
   stage,
+  onExit,
 }: {
   round: number;
   totalRounds: number;
   stage: Stage;
+  onExit: () => void;
 }) {
   const activeIndex = stage === 'result' ? 3 : STEPS.findIndex((s) => s.stage === stage);
   return (
     <View>
-      <View style={styles.rounds}>
-        <Text style={styles.roundLabel}>Раунд {round}</Text>
-        <View style={styles.pips}>
-          {Array.from({ length: totalRounds }).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.pip,
-                i < round - 1 && styles.pipDone,
-                i === round - 1 && styles.pipNow,
-              ]}
-            />
-          ))}
+      <View style={styles.top}>
+        <Pressable onPress={onExit} hitSlop={12} accessibilityRole="button" style={styles.side}>
+          <Text style={styles.exit}>Выйти</Text>
+        </Pressable>
+        <Text style={styles.title}>«Убежище»</Text>
+        <View style={[styles.side, styles.roundBox]} accessibilityLabel={`Раунд ${round} из ${totalRounds}`}>
+          <View style={styles.roundCircle}>
+            <Text style={styles.roundNum}>{round}</Text>
+          </View>
+          <Text style={styles.roundLabel}>
+            Раунд {round}/{totalRounds}
+          </Text>
         </View>
       </View>
-      <View style={styles.steps}>
+      <View style={styles.tabs}>
         {STEPS.map((s, i) => {
-          const done = i < activeIndex;
           const now = i === activeIndex;
-          return (
-            <View key={s.stage} style={[styles.step, now && styles.stepNow]}>
-              <Text style={[styles.stepText, (now || done) && styles.stepTextOn]}>
-                {i + 1}. {s.label}
+          const done = i < activeIndex;
+          return now ? (
+            <ImageBackground
+              key={s.stage}
+              source={images.paper}
+              resizeMode="repeat"
+              style={[styles.tab, styles.tabNow]}
+            >
+              <Text style={[styles.tabText, styles.tabTextNow]} numberOfLines={1} adjustsFontSizeToFit>
+                {s.label}
+              </Text>
+            </ImageBackground>
+          ) : (
+            <View key={s.stage} style={[styles.tab, done && styles.tabDone]}>
+              <Text style={[styles.tabText, done && styles.tabTextDone]} numberOfLines={1} adjustsFontSizeToFit>
+                {s.label}
               </Text>
             </View>
           );
@@ -55,20 +67,62 @@ export function StageBar({
 }
 
 const styles = StyleSheet.create({
-  rounds: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  roundLabel: { color: colors.text, fontFamily: fonts.display, fontSize: 20 },
-  pips: { flexDirection: 'row', gap: 6 },
-  pip: { width: 18, height: 6, borderRadius: 1, backgroundColor: colors.line },
-  pipDone: { backgroundColor: colors.muted },
-  pipNow: { backgroundColor: colors.amber },
-  steps: { flexDirection: 'row', marginTop: spacing.md, gap: spacing.xs },
-  step: {
+  top: { flexDirection: 'row', alignItems: 'center' },
+  side: { width: 74 },
+  exit: { fontFamily: fonts.body, fontSize: 14, color: colors.onWoodMuted },
+  title: {
     flex: 1,
-    paddingVertical: 6,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.line,
+    textAlign: 'center',
+    fontFamily: fonts.display,
+    fontSize: 30,
+    lineHeight: 38,
+    letterSpacing: 2,
+    color: colors.onWood,
+    textTransform: 'uppercase',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 4,
+    textShadowOffset: { width: 0, height: 2 },
   },
-  stepNow: { borderBottomColor: colors.amber },
-  stepText: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
-  stepTextOn: { color: colors.text },
+  roundBox: { alignItems: 'center' },
+  roundCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: colors.onWood,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roundNum: { fontFamily: fonts.display, fontSize: 16, lineHeight: 20, color: colors.onWood },
+  roundLabel: {
+    fontFamily: fonts.displayMed,
+    fontSize: 11,
+    color: colors.onWood,
+    letterSpacing: 1,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  tabs: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  tab: {
+    flex: 1,
+    height: 38,
+    borderWidth: 2,
+    borderColor: 'rgba(234, 220, 191, 0.45)',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    overflow: 'hidden',
+  },
+  tabNow: { borderColor: colors.onWood },
+  tabDone: { borderColor: 'rgba(234, 220, 191, 0.7)' },
+  tabText: {
+    fontFamily: fonts.display,
+    fontSize: 14,
+    letterSpacing: 1,
+    color: 'rgba(234, 220, 191, 0.55)',
+    textTransform: 'uppercase',
+  },
+  tabTextNow: { color: colors.ink },
+  tabTextDone: { color: colors.onWood },
 });

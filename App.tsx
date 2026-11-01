@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import { StatusBar, StyleSheet, View } from 'react-native';
+import { ImageBackground, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
-import { RussoOne_400Regular } from '@expo-google-fonts/russo-one';
+import { Oswald_500Medium, Oswald_700Bold } from '@expo-google-fonts/oswald';
 import { PTSans_400Regular, PTSans_700Bold } from '@expo-google-fonts/pt-sans';
 import { PTMono_400Regular } from '@expo-google-fonts/pt-mono';
 import { newGame } from './src/game/engine';
 import type { GameState } from './src/game/types';
 import { GameScreen } from './src/screens/GameScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
-import { colors } from './src/theme';
+import { colors, images } from './src/theme';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    RussoOne_400Regular,
+    Oswald_500Medium,
+    Oswald_700Bold,
     PTSans_400Regular,
     PTSans_700Bold,
     PTMono_400Regular,
@@ -25,21 +26,24 @@ export default function App() {
 
   return (
     <SafeAreaProvider style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
-      {game ? (
-        <GameScreen key={gameKey} initial={game} onExit={() => setGame(null)} />
-      ) : (
-        <HomeScreen
-          onStart={(name, players) => {
-            setGameKey((k) => k + 1);
-            setGame(newGame({ humanName: name, players }));
-          }}
-        />
-      )}
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      {/* Деревянный стол лежит под всеми экранами и не прокручивается вместе с ними. */}
+      <ImageBackground source={images.wood} resizeMode="cover" style={styles.root}>
+        {game ? (
+          <GameScreen key={gameKey} initial={game} onExit={() => setGame(null)} />
+        ) : (
+          <HomeScreen
+            onStart={(name, players) => {
+              setGameKey((k) => k + 1);
+              setGame(newGame({ humanName: name, players }));
+            }}
+          />
+        )}
+      </ImageBackground>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: colors.wood },
 });

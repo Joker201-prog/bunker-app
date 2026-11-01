@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Button } from '../components/Button';
-import { HazardStripe } from '../components/HazardStripe';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DeskButton, Paper, Stamp, Tape } from '../components/Desk';
 import { MAX_PLAYERS, MIN_PLAYERS, seatsFor } from '../game/engine';
-import { colors, fonts, radius, spacing } from '../theme';
+import { colors, fonts, spacing } from '../theme';
 
 interface Props {
   onStart: (name: string, players: number) => void;
@@ -17,6 +16,12 @@ const RULES = [
   'В конце станет ясно, переживёт ли катастрофу та группа, что осталась.',
 ];
 
+function seatsWord(n: number): string {
+  if (n % 10 === 1 && n % 100 !== 11) return 'место';
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return 'места';
+  return 'мест';
+}
+
 export function HomeScreen({ onStart }: Props) {
   const [name, setName] = useState('');
   const [count, setCount] = useState(8);
@@ -28,30 +33,32 @@ export function HomeScreen({ onStart }: Props) {
     <ScrollView
       contentContainerStyle={[
         styles.container,
-        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+        { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 32 },
       ]}
       keyboardShouldPersistTaps="handled"
     >
-      <HazardStripe />
+      <Text style={styles.title}>«Убежище»</Text>
+      <Text style={styles.lead}>
+        Мест в бункере вдвое меньше, чем людей у двери. Докажите, что вы нужнее остальных.
+      </Text>
 
-      <View style={styles.hero}>
-        <Text style={styles.title}>Убежище</Text>
-        <Text style={styles.lead}>
-          Мест в бункере вдвое меньше, чем людей у двери. Докажите, что вы нужнее остальных.
+      <Paper rotate="-1deg" style={styles.form}>
+        <Stamp label="Заявка на место" size={17} rotate="-4deg" />
+        <Text style={[styles.label, styles.gapTop]}>Фамилия, имя:</Text>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="как вас называть"
+          placeholderTextColor={colors.inkSoft}
+          style={styles.input}
+          maxLength={16}
+        />
+        <Text style={[styles.label, styles.gapTop]}>Мест в убежище:</Text>
+        <Text style={styles.value}>
+          {seats} {seatsWord(seats)} на {count} человек
         </Text>
-      </View>
+      </Paper>
 
-      <Text style={styles.label}>Ваше имя</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        placeholder="Как вас называть"
-        placeholderTextColor={colors.neutral}
-        style={styles.input}
-        maxLength={16}
-      />
-
-      <Text style={[styles.label, styles.gap]}>Сколько человек у двери</Text>
       <View style={styles.counter}>
         <Pressable
           accessibilityRole="button"
@@ -61,12 +68,7 @@ export function HomeScreen({ onStart }: Props) {
         >
           <Text style={styles.stepText}>−</Text>
         </Pressable>
-        <View style={styles.countBox}>
-          <Text style={styles.count}>{count}</Text>
-          <Text style={styles.seats}>
-            {seats} {seats === 1 ? 'место' : seats < 5 ? 'места' : 'мест'} внутри
-          </Text>
-        </View>
+        <Tape label={`Участники: ${count}`} size={28} style={styles.tape} />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Больше игроков"
@@ -77,75 +79,86 @@ export function HomeScreen({ onStart }: Props) {
         </Pressable>
       </View>
 
-      <Button label="Открыть дверь" onPress={() => onStart(name.trim(), count)} style={styles.start} />
+      <DeskButton label="Открыть дверь" onPress={() => onStart(name.trim(), count)} style={styles.start} />
       <Text style={styles.note}>Остальных игроков пока изображают боты.</Text>
 
-      <Pressable onPress={() => setShowRules((v) => !v)} style={styles.rulesToggle}>
-        <Text style={styles.rulesToggleText}>{showRules ? 'Скрыть правила' : 'Как играть'}</Text>
-      </Pressable>
+      <DeskButton
+        label={showRules ? 'Скрыть правила' : 'Как играть'}
+        variant="secondary"
+        onPress={() => setShowRules((v) => !v)}
+        style={styles.rulesBtn}
+      />
       {showRules && (
-        <View style={styles.rules}>
+        <Paper rotate="0.6deg" style={styles.rules}>
           {RULES.map((r, i) => (
-            <View key={i} style={styles.rule}>
-              <Text style={styles.ruleNum}>{i + 1}</Text>
-              <Text style={styles.ruleText}>{r}</Text>
-            </View>
+            <Text key={i} style={styles.rule}>
+              {i + 1}. {r}
+            </Text>
           ))}
-        </View>
+        </Paper>
       )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.xxl },
-  hero: { marginTop: spacing.xxl, marginBottom: spacing.xxl },
-  title: { color: colors.amber, fontFamily: fonts.display, fontSize: 52, lineHeight: 60 },
+  container: { paddingHorizontal: spacing.xl },
+  title: {
+    fontFamily: fonts.display,
+    fontSize: 54,
+    lineHeight: 66,
+    letterSpacing: 3,
+    color: colors.onWood,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowRadius: 6,
+    textShadowOffset: { width: 0, height: 3 },
+  },
   lead: {
-    color: colors.text,
-    fontFamily: fonts.body,
-    fontSize: 18,
-    lineHeight: 26,
-    marginTop: spacing.md,
-    maxWidth: 340,
+    fontFamily: fonts.type,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.onWood,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xxl,
   },
-  label: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, marginBottom: spacing.sm },
-  gap: { marginTop: spacing.xl },
+  form: { marginBottom: spacing.xl },
+  gapTop: { marginTop: spacing.lg },
+  label: { fontFamily: fonts.type, fontSize: 14, color: colors.inkSoft },
   input: {
-    backgroundColor: colors.panel,
-    color: colors.text,
-    borderRadius: radius.sm,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.line,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    fontFamily: fonts.type,
     fontSize: 18,
-    fontFamily: fonts.body,
+    color: colors.ink,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink,
+    paddingVertical: 6,
+    paddingHorizontal: 0,
   },
-  counter: {
-    flexDirection: 'row',
+  value: { fontFamily: fonts.type, fontSize: 18, color: colors.ink, marginTop: 4 },
+  counter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  tape: { flex: 1, minWidth: 0 },
+  step: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: colors.onWood,
     alignItems: 'center',
-    backgroundColor: colors.panel,
-    borderRadius: radius.sm,
+    justifyContent: 'center',
   },
-  step: { width: 64, height: 72, alignItems: 'center', justifyContent: 'center' },
-  stepPressed: { backgroundColor: colors.raised },
-  stepText: { color: colors.amber, fontFamily: fonts.bold, fontSize: 28 },
-  countBox: { flex: 1, alignItems: 'center' },
-  count: { color: colors.text, fontFamily: fonts.display, fontSize: 34, lineHeight: 40 },
-  seats: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
+  stepPressed: { backgroundColor: 'rgba(234, 220, 191, 0.15)' },
+  stepText: { fontFamily: fonts.display, fontSize: 26, lineHeight: 32, color: colors.onWood },
   start: { marginTop: spacing.xxl },
   note: {
-    color: colors.neutral,
-    fontFamily: fonts.body,
+    fontFamily: fonts.type,
     fontSize: 13,
-    marginTop: spacing.sm,
+    color: colors.onWoodMuted,
     textAlign: 'center',
+    marginTop: spacing.sm,
   },
-  rulesToggle: { alignSelf: 'flex-start', marginTop: spacing.xl, paddingVertical: spacing.sm },
-  rulesToggleText: { color: colors.amber, fontFamily: fonts.bold, fontSize: 15 },
-  rules: { marginTop: spacing.sm },
-  rule: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-  ruleNum: { color: colors.amber, fontFamily: fonts.mono, fontSize: 15, width: 14 },
-  ruleText: { flex: 1, color: colors.text, fontFamily: fonts.body, fontSize: 15, lineHeight: 22 },
+  rulesBtn: { marginTop: spacing.xl },
+  rules: { marginTop: spacing.lg },
+  rule: { fontFamily: fonts.type, fontSize: 14, lineHeight: 21, color: colors.ink, marginBottom: spacing.sm },
 });

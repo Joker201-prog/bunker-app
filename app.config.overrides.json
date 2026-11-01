@@ -2,22 +2,22 @@
   "expo": {
     "name": "Убежище",
     "slug": "ubezhishe",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#16181b",
+    "backgroundColor": "#2b1d13",
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#16181b"
+      "backgroundColor": "#2b1d13"
     },
     "android": {
       "package": "ru.ubezhishe.bunker",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#16181b"
+        "backgroundColor": "#2b1d13"
       }
     }
   }

@@ -4,7 +4,6 @@ import {
   BackHandler,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,11 +11,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from '../components/Button';
-import { HazardStripe } from '../components/HazardStripe';
-import { PlayerCards } from '../components/PlayerCards';
-import { StageBar } from '../components/StageBar';
-import { TAG_LABEL } from '../data/cards';
+import { DeskButton, Paper, Stamp, Tape, WoodHeading } from '../components/Desk';
+import { Dossier } from '../components/Dossier';
+import { EventSheet } from '../components/EventSheet';
+import { GameHeader } from '../components/StageBar';
 import {
   addChat,
   alivePlayers,
@@ -34,7 +32,7 @@ import {
   startVoting,
 } from '../game/engine';
 import type { CardKind, GameState } from '../game/types';
-import { colors, fonts, radius, spacing } from '../theme';
+import { colors, fonts, spacing } from '../theme';
 import { FinalScreen } from './FinalScreen';
 
 const DISCUSSION_SECONDS = 60;
@@ -57,6 +55,12 @@ function peopleWord(n: number): string {
   return 'человек';
 }
 
+function seatsWord(n: number): string {
+  if (n % 10 === 1 && n % 100 !== 11) return 'место';
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return 'места';
+  return 'мест';
+}
+
 export function GameScreen({ initial, onExit }: Props) {
   const [state, setState] = useState<GameState>(initial);
   const [secondsLeft, setSecondsLeft] = useState(DISCUSSION_SECONDS);
@@ -68,6 +72,7 @@ export function GameScreen({ initial, onExit }: Props) {
   const insets = useSafeAreaInsets();
 
   const human = state.players.find((p) => p.isHuman)!;
+  const numberOf = (id: string) => state.players.findIndex((p) => p.id === id) + 1;
 
   function confirmExit() {
     Alert.alert('Выйти из партии?', 'Прогресс партии будет потерян.', [
@@ -147,15 +152,7 @@ export function GameScreen({ initial, onExit }: Props) {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerTop}>
-          <Text style={styles.headerMeta}>
-            {alive.length} у двери · {state.seats} мест
-          </Text>
-          <Pressable onPress={confirmExit} hitSlop={12}>
-            <Text style={styles.exit}>Выйти</Text>
-          </Pressable>
-        </View>
-        <StageBar round={state.round} totalRounds={state.totalRounds} stage={state.stage} />
+        <GameHeader round={state.round} totalRounds={state.totalRounds} stage={state.stage} onExit={confirmExit} />
       </View>
 
       <ScrollView
@@ -164,42 +161,19 @@ export function GameScreen({ initial, onExit }: Props) {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable style={styles.situation} onPress={() => setShowSituation((v) => !v)}>
-          <View style={styles.situationHead}>
-            <Text style={styles.catTitle}>{state.catastrophe.title}</Text>
-            <Text style={styles.toggle}>{showSituation ? 'Свернуть' : 'Подробнее'}</Text>
-          </View>
-          {showSituation && (
-            <View style={styles.situationBody}>
-              <Text style={styles.body}>{state.catastrophe.text}</Text>
-              <Text style={styles.body}>Ждать снаружи придётся около {state.catastropheYears} лет.</Text>
-              <Text style={styles.subhead}>Что понадобится</Text>
-              <View style={styles.needs}>
-                {state.catastrophe.needs.map((n) => (
-                  <Text key={n} style={styles.need}>
-                    {TAG_LABEL[n]}
-                  </Text>
-                ))}
-              </View>
-              <Text style={styles.subhead}>Что есть в бункере</Text>
-              {state.bunker.map((b) => (
-                <View key={b.title} style={styles.bunkerRow}>
-                  <View
-                    style={[styles.dot, { backgroundColor: b.bonus >= 0 ? colors.good : colors.bad }]}
-                  />
-                  <Text style={styles.bunkerText}>
-                    <Text style={styles.bunkerTitle}>{b.title}.</Text> {b.text}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </Pressable>
+        <EventSheet state={state} expanded={showSituation} onToggle={() => setShowSituation((v) => !v)} />
+        <Tape
+          label={`Участники: ${alive.length} · ${state.seats} ${seatsWord(state.seats)}`}
+          size={24}
+          rotate="-2deg"
+          style={styles.tape}
+        />
 
         {state.stage === 'table' && (
           <TableStage
             state={state}
             others={others}
+            numberOf={numberOf}
             onReveal={(kind) => setState((s) => revealCard(s, 'human', kind))}
             onContinue={goDiscussion}
           />
@@ -208,86 +182,91 @@ export function GameScreen({ initial, onExit }: Props) {
         {state.stage === 'discussion' && (
           <View>
             <View style={styles.timerRow}>
-              <Text style={styles.sectionTitle}>Обсуждение</Text>
+              <WoodHeading style={styles.noMargin}>Обсуждение</WoodHeading>
               <Text style={[styles.timer, secondsLeft <= 10 && styles.timerLow]}>{clock(secondsLeft)}</Text>
             </View>
-            {/* Чат фиксированной высоты: новые реплики прокручивают его, а поле ввода и кнопки не сдвигаются. */}
-            <ScrollView
-              ref={chatRef}
-              style={styles.chat}
-              contentContainerStyle={styles.chatContent}
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-              onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: false })}
-            >
-              {state.chat.map((m) => {
-                if (m.authorId === null) {
-                  return (
+
+            {/* Блокнот фиксированной высоты: новые реплики прокручивают его, поле ввода не сдвигается. */}
+            <Paper rotate="-0.4deg" padded={false}>
+              <ScrollView
+                ref={chatRef}
+                style={styles.chat}
+                contentContainerStyle={styles.chatContent}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: false })}
+              >
+                {state.chat.map((m) =>
+                  m.authorId === null ? (
                     <Text key={m.id} style={styles.systemMsg}>
+                      — {m.text} —
+                    </Text>
+                  ) : (
+                    <Text key={m.id} style={styles.msg}>
+                      <Text style={[styles.author, m.authorId === 'human' && styles.authorMine]}>
+                        {m.authorId === 'human' ? 'Вы' : playerById(state, m.authorId).name}:{' '}
+                      </Text>
                       {m.text}
                     </Text>
-                  );
-                }
-                const mine = m.authorId === 'human';
-                return (
-                  <View key={m.id} style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
-                    {!mine && <Text style={styles.author}>{playerById(state, m.authorId).name}</Text>}
-                    <Text style={styles.msgText}>{m.text}</Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
+                  ),
+                )}
+              </ScrollView>
+            </Paper>
+
             {human.alive ? (
               <View style={styles.inputRow}>
-                <TextInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Чем вы полезны бункеру?"
-                  placeholderTextColor={colors.neutral}
-                  style={styles.input}
-                  onSubmitEditing={sendMessage}
-                  maxLength={200}
-                />
-                <Button label="Сказать" onPress={sendMessage} style={styles.send} />
+                <Paper padded={false} style={styles.inputPaper}>
+                  <TextInput
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder="Чем вы полезны бункеру?"
+                    placeholderTextColor={colors.inkSoft}
+                    style={styles.input}
+                    onSubmitEditing={sendMessage}
+                    maxLength={200}
+                  />
+                </Paper>
+                <DeskButton label="Сказать" onPress={sendMessage} style={styles.send} />
               </View>
             ) : (
-              <Text style={styles.muted}>Вы за дверью и только наблюдаете.</Text>
+              <Text style={styles.woodNote}>Вы за дверью и только наблюдаете.</Text>
             )}
-            <Button
-              label={elims > 0 ? 'Перейти к голосованию' : 'Завершить раунд'}
+            <DeskButton
+              label={elims > 0 ? 'Голосовать' : 'Завершить раунд'}
               variant="secondary"
               onPress={goVoting}
               style={styles.block}
             />
-            <Text style={styles.sectionTitle}>Досье</Text>
+
+            <WoodHeading>Досье</WoodHeading>
             {state.players.map((p) => (
-              <PlayerCards key={p.id} player={p} showAll={p.isHuman} secretHint={p.isHuman} onlyOpen={!p.isHuman} />
+              <Dossier key={p.id} player={p} number={numberOf(p.id)} showAll={p.isHuman} secretHint={p.isHuman} />
             ))}
           </View>
         )}
 
         {state.stage === 'voting' && (
           <View>
-            <Text style={styles.sectionTitle}>Кого не пускаем?</Text>
-            <Text style={styles.hint}>
+            <WoodHeading>Кого не пускаем?</WoodHeading>
+            <Text style={styles.woodText}>
               {human.alive
                 ? elims === 1
-                  ? 'В этом раунде за дверью останется один человек. Выберите, против кого голосуете.'
-                  : `В этом раунде за дверью останутся ${elims} ${peopleWord(elims)}. Выберите, против кого голосуете.`
+                  ? 'В этом раунде за дверью останется один человек. Нажмите на досье того, против кого голосуете.'
+                  : `В этом раунде за дверью останутся ${elims} ${peopleWord(elims)}. Нажмите на досье того, против кого голосуете.`
                 : 'Вы за дверью. Остальные голосуют без вас.'}
             </Text>
             {alive
               .filter((p) => !p.isHuman)
               .map((p) => (
-                <PlayerCards
+                <Dossier
                   key={p.id}
                   player={p}
-                  onlyOpen
-                  highlight={selected === p.id}
+                  number={numberOf(p.id)}
+                  marked={selected === p.id}
                   onPress={human.alive ? () => setSelected(p.id) : undefined}
                 />
               ))}
-            <Button
+            <DeskButton
               label={human.alive ? 'Проголосовать' : 'Подсчитать голоса'}
               onPress={submitVote}
               disabled={human.alive && !selected}
@@ -297,7 +276,12 @@ export function GameScreen({ initial, onExit }: Props) {
         )}
 
         {state.stage === 'result' && (
-          <ResultStage state={state} last={isLastRound(state)} onNext={() => setState((s) => nextRound(s))} />
+          <ResultStage
+            state={state}
+            numberOf={numberOf}
+            last={isLastRound(state)}
+            onNext={() => setState((s) => nextRound(s))}
+          />
         )}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -307,11 +291,13 @@ export function GameScreen({ initial, onExit }: Props) {
 function TableStage({
   state,
   others,
+  numberOf,
   onReveal,
   onContinue,
 }: {
   state: GameState;
   others: GameState['players'];
+  numberOf: (id: string) => number;
   onReveal: (kind: CardKind) => void;
   onContinue: () => void;
 }) {
@@ -321,80 +307,91 @@ function TableStage({
   let hint: string;
   if (!human.alive) hint = 'Вы за дверью и наблюдаете за игрой.';
   else if (done) hint = 'Карта открыта. Остальные покажут свои, когда начнётся обсуждение.';
-  else if (state.round === 1) hint = 'Первый раунд: покажите всем свою профессию.';
-  else hint = 'Выберите одну карту, которую увидят все.';
+  else if (state.round === 1) hint = 'Первый раунд: нажмите «Раскрыть» у профессии.';
+  else hint = 'Нажмите «Раскрыть» у одной карты — её увидят все.';
 
   return (
     <View>
-      <Text style={styles.sectionTitle}>Ваше досье</Text>
-      <Text style={styles.hint}>{hint}</Text>
-      <PlayerCards player={human} showAll secretHint revealable={revealable} onReveal={onReveal} />
-      <Button label="Начать обсуждение" onPress={onContinue} disabled={!done} style={styles.block} />
-      <Text style={styles.sectionTitle}>Остальные</Text>
+      <WoodHeading>Ваше досье</WoodHeading>
+      <Text style={styles.woodText}>{hint}</Text>
+      <Dossier
+        player={human}
+        number={numberOf(human.id)}
+        showAll
+        secretHint
+        revealable={revealable}
+        onReveal={onReveal}
+      />
+      <DeskButton label="Начать обсуждение" onPress={onContinue} disabled={!done} style={styles.block} />
+      <WoodHeading>Остальные</WoodHeading>
       {others.map((p) => (
-        <PlayerCards key={p.id} player={p} onlyOpen />
+        <Dossier key={p.id} player={p} number={numberOf(p.id)} />
       ))}
     </View>
   );
 }
 
-function ResultStage({ state, last, onNext }: { state: GameState; last: boolean; onNext: () => void }) {
+/** Палочки для подсчёта голосов группами по пять: «||||| ||». */
+function tallyMarks(n: number): string {
+  const groups: string[] = [];
+  for (let left = n; left > 0; left -= 5) groups.push('|'.repeat(Math.min(5, left)));
+  return groups.join(' ');
+}
+
+function ResultStage({
+  state,
+  numberOf,
+  last,
+  onNext,
+}: {
+  state: GameState;
+  numberOf: (id: string) => number;
+  last: boolean;
+  onNext: () => void;
+}) {
   const result = state.results[state.results.length - 1];
   const leaving = result.eliminated.map((id) => playerById(state, id));
   const tally = Object.entries(result.tally)
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1]);
-  const maxVotes = tally.length ? tally[0][1] : 1;
 
   return (
     <View>
       {leaving.length === 0 ? (
-        <Text style={styles.hint}>В этом раунде голосования не было — все остаются у двери.</Text>
+        <Text style={styles.woodText}>В этом раунде голосования не было — все остаются у двери.</Text>
       ) : (
-        <View style={styles.verdict}>
-          <HazardStripe height={6} />
-          <View style={styles.verdictBody}>
-            <Text style={styles.muted}>Дверь закрывается перед</Text>
-            <Text style={styles.verdictNames}>{leaving.map((p) => p.name).join(', ')}</Text>
-            {result.tieBroken && <Text style={styles.muted}>Голоса разделились поровну — решил жребий.</Text>}
-            {result.shieldBlocked.length > 0 && (
-              <Text style={styles.muted}>
-                «Неприкосновенность» спасла:{' '}
-                {result.shieldBlocked.map((id) => playerById(state, id).name).join(', ')}.
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-
-      {tally.length > 0 && (
-        <View style={styles.tally}>
-          <Text style={styles.subhead}>Голоса</Text>
+        <Paper rotate="-0.8deg" style={styles.protocol}>
+          <Stamp label={`Протокол раунда ${state.round}`} size={17} rotate="-3deg" />
+          <Text style={[styles.protoLine, styles.gapTop]}>
+            Дверь закрывается перед: <Text style={styles.protoStrong}>{leaving.map((p) => p.name).join(', ')}</Text>
+          </Text>
+          {result.tieBroken && <Text style={styles.protoNote}>Голоса разделились поровну — решил жребий.</Text>}
+          {result.shieldBlocked.length > 0 && (
+            <Text style={styles.protoNote}>
+              «Неприкосновенность» спасла: {result.shieldBlocked.map((id) => playerById(state, id).name).join(', ')}.
+            </Text>
+          )}
+          <Text style={[styles.protoSub, styles.gapTop]}>Голоса:</Text>
           {tally.map(([id, n]) => (
             <View key={id} style={styles.tallyRow}>
-              <Text style={styles.tallyName} numberOfLines={1}>
+              <Text
+                style={[styles.tallyName, result.eliminated.includes(id) && styles.tallyOut]}
+                numberOfLines={1}
+              >
                 {playerById(state, id).name}
               </Text>
-              <View style={styles.tallyTrack}>
-                <View
-                  style={[
-                    styles.tallyBar,
-                    { width: `${(n / maxVotes) * 100}%` },
-                    result.eliminated.includes(id) && styles.tallyBarOut,
-                  ]}
-                />
-              </View>
+              <Text style={styles.tallyMarks}>{tallyMarks(n)}</Text>
               <Text style={styles.tallyNum}>{n}</Text>
             </View>
           ))}
-        </View>
+        </Paper>
       )}
 
       {leaving.map((p) => (
-        <PlayerCards key={p.id} player={p} showAll />
+        <Dossier key={p.id} player={p} number={numberOf(p.id)} showAll />
       ))}
 
-      <Button label={last ? 'Узнать судьбу бункера' : 'Следующий раунд'} onPress={onNext} style={styles.block} />
+      <DeskButton label={last ? 'Узнать судьбу бункера' : 'Следующий раунд'} onPress={onNext} style={styles.block} />
     </View>
   );
 }
@@ -403,94 +400,51 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: 48,
-    paddingBottom: spacing.sm,
-    backgroundColor: colors.bg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.panel,
+    paddingBottom: spacing.md,
+    backgroundColor: 'rgba(20, 13, 8, 0.55)',
   },
-  headerTop: {
+  content: { padding: spacing.lg, paddingTop: spacing.xl },
+  tape: { marginTop: spacing.lg, marginBottom: spacing.xs },
+  noMargin: { marginTop: 0, marginBottom: 0 },
+  woodText: { fontFamily: fonts.type, fontSize: 15, lineHeight: 22, color: colors.onWood, marginBottom: spacing.xs },
+  woodNote: { fontFamily: fonts.type, fontSize: 14, color: colors.onWoodMuted, marginTop: spacing.md },
+  block: { marginTop: spacing.md, marginBottom: spacing.md },
+  gapTop: { marginTop: spacing.md },
+
+  timerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  headerMeta: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
-  exit: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
-
-  situation: {
-    backgroundColor: colors.panel,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  situationHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  catTitle: { flex: 1, color: colors.amber, fontFamily: fonts.display, fontSize: 19, lineHeight: 24 },
-  toggle: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
-  situationBody: { marginTop: spacing.sm },
-  body: { color: colors.text, fontFamily: fonts.body, fontSize: 15, lineHeight: 22, marginBottom: 4 },
-  subhead: { color: colors.muted, fontFamily: fonts.bold, fontSize: 13, marginTop: spacing.lg, marginBottom: spacing.sm },
-  needs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.xs },
-  need: {
-    color: colors.amber,
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    borderWidth: 1,
-    borderColor: colors.amber,
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  bunkerRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: 4, alignItems: 'flex-start' },
-  dot: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
-  bunkerText: { flex: 1, color: colors.text, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
-  bunkerTitle: { fontFamily: fonts.bold },
-
-  sectionTitle: { color: colors.text, fontFamily: fonts.display, fontSize: 18, marginBottom: spacing.sm, marginTop: spacing.sm },
-  hint: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, lineHeight: 22, marginBottom: spacing.md },
-  muted: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 20, marginBottom: 4 },
-  block: { marginTop: spacing.sm, marginBottom: spacing.xl },
-
-  timerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  timer: { color: colors.amber, fontFamily: fonts.mono, fontSize: 24 },
-  timerLow: { color: colors.bad },
-  chat: {
-    backgroundColor: colors.panel,
-    borderRadius: radius.md,
-    height: 260,
-    flexGrow: 0,
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
-  chatContent: { padding: spacing.md, gap: spacing.sm },
-  systemMsg: { color: colors.amber, fontFamily: fonts.body, fontSize: 13, textAlign: 'center' },
-  bubble: { maxWidth: '86%', borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  bubbleOther: { alignSelf: 'flex-start', backgroundColor: colors.raised },
-  bubbleMine: { alignSelf: 'flex-end', backgroundColor: colors.amberDeep },
-  author: { color: colors.amber, fontFamily: fonts.bold, fontSize: 12, marginBottom: 2 },
-  msgText: { color: colors.text, fontFamily: fonts.body, fontSize: 15, lineHeight: 21 },
-  inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch', marginBottom: spacing.sm },
-  input: {
-    flex: 1,
-    backgroundColor: colors.panel,
-    color: colors.text,
-    borderRadius: radius.sm,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.line,
-    paddingHorizontal: spacing.md,
-    fontSize: 15,
-    fontFamily: fonts.body,
-  },
-  send: { paddingHorizontal: 16 },
+  timer: { fontFamily: fonts.display, fontSize: 28, color: colors.onWood, letterSpacing: 1 },
+  timerLow: { color: '#ff8a7a' },
+  chat: { height: 280 },
+  chatContent: { padding: spacing.lg, gap: spacing.sm },
+  systemMsg: { fontFamily: fonts.type, fontSize: 13, color: colors.inkSoft, textAlign: 'center' },
+  msg: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.ink },
+  author: { fontFamily: fonts.bold, color: colors.stampBlue },
+  authorMine: { color: colors.stamp },
+  inputRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch', marginTop: spacing.md },
+  inputPaper: { flex: 1 },
+  input: { fontFamily: fonts.type, fontSize: 15, color: colors.ink, paddingHorizontal: spacing.md, minHeight: 52 },
+  send: { width: 120 },
 
-  verdict: { backgroundColor: colors.panel, borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.lg },
-  verdictBody: { padding: spacing.lg },
-  verdictNames: { color: colors.text, fontFamily: fonts.display, fontSize: 26, lineHeight: 32, marginVertical: 6 },
-  tally: { marginBottom: spacing.lg },
-  tallyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 6 },
-  tallyName: { width: 96, color: colors.text, fontFamily: fonts.body, fontSize: 14 },
-  tallyTrack: { flex: 1, height: 8, backgroundColor: colors.panel, borderRadius: 2, overflow: 'hidden' },
-  tallyBar: { height: 8, backgroundColor: colors.neutral },
-  tallyBarOut: { backgroundColor: colors.bad },
-  tallyNum: { width: 22, textAlign: 'right', color: colors.muted, fontFamily: fonts.mono, fontSize: 13 },
+  protocol: { marginTop: spacing.lg },
+  protoLine: { fontFamily: fonts.type, fontSize: 15, lineHeight: 22, color: colors.ink },
+  protoStrong: { fontFamily: fonts.display, fontSize: 18, color: colors.stamp, letterSpacing: 0.5 },
+  protoNote: { fontFamily: fonts.type, fontSize: 13, lineHeight: 19, color: colors.inkSoft, marginTop: spacing.xs },
+  protoSub: { fontFamily: fonts.type, fontSize: 14, color: colors.inkSoft, marginBottom: spacing.xs },
+  tallyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.paperLine,
+  },
+  tallyName: { width: 110, fontFamily: fonts.type, fontSize: 14, color: colors.ink },
+  tallyOut: { color: colors.stamp, textDecorationLine: 'line-through' },
+  tallyMarks: { flex: 1, fontFamily: fonts.type, fontSize: 16, color: colors.ink, letterSpacing: 1 },
+  tallyNum: { width: 26, textAlign: 'right', fontFamily: fonts.type, fontSize: 14, color: colors.inkSoft },
 });
