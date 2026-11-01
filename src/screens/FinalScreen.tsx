@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { HazardStripe } from '../components/HazardStripe';
 import { PlayerCards } from '../components/PlayerCards';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAG_LABEL } from '../data/cards';
 import type { GameState } from '../game/types';
 import { colors, fonts, radius, spacing } from '../theme';
@@ -19,6 +20,7 @@ const VERDICT = {
 };
 
 export function FinalScreen({ state, onRestart }: Props) {
+  const insets = useSafeAreaInsets();
   const report = state.final;
   if (!report) return null;
   const survivors = state.players.filter((p) => report.survivors.includes(p.id));
@@ -27,7 +29,12 @@ export function FinalScreen({ state, onRestart }: Props) {
   const v = VERDICT[report.verdict];
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+      ]}
+    >
       <HazardStripe />
       <Text style={styles.kicker}>{state.catastrophe.title}</Text>
       <Text style={[styles.verdict, { color: v.color }]}>{v.word}</Text>

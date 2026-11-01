@@ -257,8 +257,7 @@ export const BUNKER_CARDS: BunkerCard[] = [
   { title: 'Крысы в запасах', text: 'Часть продуктов уже испорчена.', bonus: -1, tags: [] },
 ];
 
-export function makeBiology(): Card {
-  const male = chance(0.5);
+export function makeBiology(male: boolean = chance(0.5)): Card {
   const age = int(18, 75);
   let value: number;
   if (age <= 35) value = 2;

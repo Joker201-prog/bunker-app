@@ -17,6 +17,8 @@ interface Props {
   compact?: boolean;
   /** Показывать только раскрытые карты (чужие досье). */
   onlyOpen?: boolean;
+  /** Подписывать скрытые карты своей руки: «видите только вы». */
+  secretHint?: boolean;
 }
 
 function dossierNumber(id: string): string {
@@ -33,6 +35,7 @@ export function PlayerCards({
   onPress,
   compact,
   onlyOpen,
+  secretHint,
 }: Props) {
   const Wrapper: any = onPress ? Pressable : View;
   const openCount = KIND_ORDER.filter((k) => player.revealed[k]).length;
@@ -90,7 +93,7 @@ export function PlayerCards({
                 {visible && card.note ? <Text style={styles.note}>{card.note}</Text> : null}
                 {canReveal ? (
                   <Text style={styles.action}>Раскрыть</Text>
-                ) : showAll && !open && player.alive ? (
+                ) : secretHint && showAll && !open && player.alive ? (
                   <Text style={styles.secretHint}>видите только вы</Text>
                 ) : null}
               </Tile>

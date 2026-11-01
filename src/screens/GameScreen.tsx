@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { HazardStripe } from '../components/HazardStripe';
 import { PlayerCards } from '../components/PlayerCards';
@@ -61,8 +64,29 @@ export function GameScreen({ initial, onExit }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [showSituation, setShowSituation] = useState(true);
   const scrollRef = useRef<ScrollView>(null);
+  const chatRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   const human = state.players.find((p) => p.isHuman)!;
+
+  function confirmExit() {
+    Alert.alert('Выйти из партии?', 'Прогресс партии будет потерян.', [
+      { text: 'Остаться', style: 'cancel' },
+      { text: 'Выйти', style: 'destructive', onPress: onExit },
+    ]);
+  }
+
+  // Кнопка «Назад» не закрывает приложение посреди партии: иначе Android
+  // пересоздаёт экран, и партия сбрасывается на стартовое меню.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (state.stage === 'final') onExit();
+      else confirmExit();
+      return true;
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.stage, onExit]);
 
   useEffect(() => {
     if (state.stage !== 'discussion') return;
@@ -122,12 +146,12 @@ export function GameScreen({ initial, onExit }: Props) {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerTop}>
           <Text style={styles.headerMeta}>
             {alive.length} у двери · {state.seats} мест
           </Text>
-          <Pressable onPress={onExit} hitSlop={12}>
+          <Pressable onPress={confirmExit} hitSlop={12}>
             <Text style={styles.exit}>Выйти</Text>
           </Pressable>
         </View>
@@ -137,7 +161,7 @@ export function GameScreen({ initial, onExit }: Props) {
       <ScrollView
         ref={scrollRef}
         style={styles.flex}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
       >
         <Pressable style={styles.situation} onPress={() => setShowSituation((v) => !v)}>
@@ -187,8 +211,16 @@ export function GameScreen({ initial, onExit }: Props) {
               <Text style={styles.sectionTitle}>Обсуждение</Text>
               <Text style={[styles.timer, secondsLeft <= 10 && styles.timerLow]}>{clock(secondsLeft)}</Text>
             </View>
-            <View style={styles.chat}>
-              {state.chat.slice(-30).map((m) => {
+            {/* Чат фиксированной высоты: новые реплики прокручивают его, а поле ввода и кнопки не сдвигаются. */}
+            <ScrollView
+              ref={chatRef}
+              style={styles.chat}
+              contentContainerStyle={styles.chatContent}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: false })}
+            >
+              {state.chat.map((m) => {
                 if (m.authorId === null) {
                   return (
                     <Text key={m.id} style={styles.systemMsg}>
@@ -204,7 +236,7 @@ export function GameScreen({ initial, onExit }: Props) {
                   </View>
                 );
               })}
-            </View>
+            </ScrollView>
             {human.alive ? (
               <View style={styles.inputRow}>
                 <TextInput
@@ -229,7 +261,7 @@ export function GameScreen({ initial, onExit }: Props) {
             />
             <Text style={styles.sectionTitle}>Досье</Text>
             {state.players.map((p) => (
-              <PlayerCards key={p.id} player={p} showAll={p.isHuman} onlyOpen={!p.isHuman} />
+              <PlayerCards key={p.id} player={p} showAll={p.isHuman} secretHint={p.isHuman} onlyOpen={!p.isHuman} />
             ))}
           </View>
         )}
@@ -296,7 +328,7 @@ function TableStage({
     <View>
       <Text style={styles.sectionTitle}>Ваше досье</Text>
       <Text style={styles.hint}>{hint}</Text>
-      <PlayerCards player={human} showAll revealable={revealable} onReveal={onReveal} />
+      <PlayerCards player={human} showAll secretHint revealable={revealable} onReveal={onReveal} />
       <Button label="Начать обсуждение" onPress={onContinue} disabled={!done} style={styles.block} />
       <Text style={styles.sectionTitle}>Остальные</Text>
       {others.map((p) => (
@@ -398,8 +430,8 @@ const styles = StyleSheet.create({
   toggle: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 },
   situationBody: { marginTop: spacing.sm },
   body: { color: colors.text, fontFamily: fonts.body, fontSize: 15, lineHeight: 22, marginBottom: 4 },
-  subhead: { color: colors.muted, fontFamily: fonts.bold, fontSize: 13, marginTop: spacing.md, marginBottom: 6 },
-  needs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  subhead: { color: colors.muted, fontFamily: fonts.bold, fontSize: 13, marginTop: spacing.lg, marginBottom: spacing.sm },
+  needs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.xs },
   need: {
     color: colors.amber,
     fontFamily: fonts.bold,
@@ -426,11 +458,11 @@ const styles = StyleSheet.create({
   chat: {
     backgroundColor: colors.panel,
     borderRadius: radius.md,
-    padding: spacing.md,
-    minHeight: 140,
+    height: 260,
+    flexGrow: 0,
     marginBottom: spacing.md,
-    gap: spacing.sm,
   },
+  chatContent: { padding: spacing.md, gap: spacing.sm },
   systemMsg: { color: colors.amber, fontFamily: fonts.body, fontSize: 13, textAlign: 'center' },
   bubble: { maxWidth: '86%', borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   bubbleOther: { alignSelf: 'flex-start', backgroundColor: colors.raised },

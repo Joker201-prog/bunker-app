@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { HazardStripe } from '../components/HazardStripe';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MAX_PLAYERS, MIN_PLAYERS, seatsFor } from '../game/engine';
 import { colors, fonts, radius, spacing } from '../theme';
 
@@ -21,9 +22,16 @@ export function HomeScreen({ onStart }: Props) {
   const [count, setCount] = useState(8);
   const [showRules, setShowRules] = useState(false);
   const seats = seatsFor(count);
+  const insets = useSafeAreaInsets();
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      contentContainerStyle={[
+        styles.container,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 },
+      ]}
+      keyboardShouldPersistTaps="handled"
+    >
       <HazardStripe />
 
       <View style={styles.hero}>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { RussoOne_400Regular } from '@expo-google-fonts/russo-one';
 import { PTSans_400Regular, PTSans_700Bold } from '@expo-google-fonts/pt-sans';
@@ -23,7 +24,7 @@ export default function App() {
   if (!fontsLoaded) return <View style={styles.root} />;
 
   return (
-    <View style={styles.root}>
+    <SafeAreaProvider style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
       {game ? (
         <GameScreen key={gameKey} initial={game} onExit={() => setGame(null)} />
@@ -31,11 +32,11 @@ export default function App() {
         <HomeScreen
           onStart={(name, players) => {
             setGameKey((k) => k + 1);
-            setGame(newGame({ humanName: name || 'Вы', players }));
+            setGame(newGame({ humanName: name, players }));
           }}
         />
       )}
-    </View>
+    </SafeAreaProvider>
   );
 }
 

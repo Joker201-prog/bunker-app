@@ -35,7 +35,7 @@ jobs:
 
       - name: Install fonts and splash
         working-directory: app
-        run: npx expo install expo-font expo-splash-screen @expo-google-fonts/russo-one @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
+        run: npx expo install expo-font expo-splash-screen react-native-safe-area-context @expo-google-fonts/russo-one @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
 
       - name: Configure app.json
         working-directory: app

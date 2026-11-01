@@ -28,10 +28,27 @@ export const TOTAL_ROUNDS = 5;
 export const MIN_PLAYERS = 4;
 export const MAX_PLAYERS = 16;
 
-const BOT_NAMES = [
-  'Алексей', 'Мария', 'Дмитрий', 'Ольга', 'Игорь', 'Наталья', 'Сергей', 'Анна',
-  'Виктор', 'Елена', 'Максим', 'Ирина', 'Артём', 'Светлана', 'Николай', 'Татьяна',
+/** Имена с полом: биология бота всегда соответствует его имени. */
+export const BOT_NAMES: { name: string; male: boolean }[] = [
+  { name: 'Алексей', male: true },
+  { name: 'Мария', male: false },
+  { name: 'Дмитрий', male: true },
+  { name: 'Ольга', male: false },
+  { name: 'Игорь', male: true },
+  { name: 'Наталья', male: false },
+  { name: 'Сергей', male: true },
+  { name: 'Анна', male: false },
+  { name: 'Виктор', male: true },
+  { name: 'Елена', male: false },
+  { name: 'Максим', male: true },
+  { name: 'Ирина', male: false },
+  { name: 'Артём', male: true },
+  { name: 'Светлана', male: false },
+  { name: 'Николай', male: true },
+  { name: 'Татьяна', male: false },
 ];
+
+export const DEFAULT_HUMAN_NAME = 'Игрок';
 
 /** Draws cards without repeats until a pool runs dry, then reshuffles it. */
 function makeDeck<T>(pool: readonly T[]): () => T {
@@ -69,13 +86,16 @@ export function newGame(opts: { humanName: string; players: number }): GameState
     special: makeDeck(SPECIALS),
   };
 
-  const names = shuffle(BOT_NAMES).filter((n) => n !== opts.humanName);
+  const humanName = opts.humanName.trim() || DEFAULT_HUMAN_NAME;
+  const names = shuffle(BOT_NAMES).filter((n) => n.name !== humanName);
   const players: Player[] = [];
   for (let i = 0; i < count; i++) {
     const isHuman = i === 0;
+    const bot = isHuman ? null : names[(i - 1) % names.length];
+    const male = bot ? bot.male : chance(0.5);
     const cards = {
       profession: draw.profession(),
-      biology: makeBiology(),
+      biology: makeBiology(male),
       health: draw.health(),
       fact: draw.fact(),
       hobby: draw.hobby(),
@@ -84,7 +104,7 @@ export function newGame(opts: { humanName: string; players: number }): GameState
     } as Record<CardKind, Card>;
     players.push({
       id: isHuman ? 'human' : `bot${i}`,
-      name: isHuman ? opts.humanName || 'Вы' : names[(i - 1) % names.length],
+      name: isHuman ? humanName : (bot as { name: string }).name,
       isHuman,
       alive: true,
       cards,
@@ -209,44 +229,97 @@ function revealedValue(p: Player): number {
   return KIND_ORDER.filter((k) => p.revealed[k]).reduce((sum, k) => sum + p.cards[k].value, 0);
 }
 
-/** A believable line for a random living bot, based on what is already on the table. */
+/*
+ * Реплики ботов. Имена стоят только в начале фразы и в именительном падеже
+ * («Игорь, …»), чтобы не склонять их. Обращения на «ты» не зависят от пола.
+ */
+const BOAST: ((card: string) => string)[] = [
+  (c) => `У меня «${c}». Это пригодится бункеру.`,
+  (c) => `«${c}» — вот что я принесу в бункер.`,
+  (c) => `Моя карта «${c}» нам точно пригодится.`,
+  (c) => `Не забывайте: у меня «${c}».`,
+];
+
+const ACCUSE: ((name: string, card: string) => string)[] = [
+  (n, c) => `${n}, «${c}» — это проблема для нас. Объясни.`,
+  (n, c) => `${n}, как «${c}» поможет бункеру?`,
+  (n, c) => `${n}, «${c}» — серьёзный минус. Что скажешь?`,
+  (n, c) => `${n}, мне не нравится «${c}». Убеди нас.`,
+];
+
+const NEED: ((tag: string) => string)[] = [
+  (t) => `Для этой катастрофы критична тема «${t}». Смотрите, у кого она есть.`,
+  (t) => `Нам нужна тема «${t}». Кто может её закрыть?`,
+  (t) => `Без темы «${t}» мы не выживем.`,
+  (t) => `Кто из нас отвечает за тему «${t}»?`,
+];
+
+const QUIET: ((name: string) => string)[] = [
+  (n) => `${n}, ты пока молчишь. Что скажешь в своё оправдание?`,
+  (n) => `${n}, твоя очередь рассказать о себе.`,
+  (n) => `${n}, мы почти ничего о тебе не знаем. Расскажи.`,
+];
+
+const CAUTION = [
+  'Давайте не спешить, пока почти ничего не раскрыто.',
+  'Пока мало данных. Послушаем остальных.',
+];
+
+function openCards(p: Player): Card[] {
+  return KIND_ORDER.filter((k) => p.revealed[k]).map((k) => p.cards[k]);
+}
+
+/** Одна возможная реплика бота; null, если сказать нечего. */
+function candidateLine(s: GameState, bot: Player): string | null {
+  const others = alivePlayers(s).filter((p) => p.id !== bot.id);
+  const roll = rng.next();
+
+  if (roll < 0.3) {
+    const good = openCards(bot).filter((c) => c.value > 0);
+    return good.length ? pick(BOAST)(pick(good).title) : null;
+  }
+  if (roll < 0.65) {
+    const withCards = others
+      .map((o) => ({ o, worst: openCards(o).sort((a, b) => a.value - b.value)[0] }))
+      .filter((x) => x.worst && x.worst.value < 0)
+      .sort((a, b) => a.worst.value - b.worst.value)
+      .slice(0, 3);
+    if (!withCards.length) return pick(CAUTION);
+    const t = pick(withCards);
+    return pick(ACCUSE)(t.o.name, t.worst.title);
+  }
+  if (roll < 0.82) {
+    return pick(NEED)(TAG_LABEL[pick(s.catastrophe.needs)]);
+  }
+  if (roll < 0.95) {
+    const quiet = others
+      .slice()
+      .sort((a, b) => openCards(a).length - openCards(b).length)
+      .slice(0, 2);
+    return quiet.length ? pick(QUIET)(pick(quiet).name) : null;
+  }
+  return pick(CAUTION);
+}
+
+/** Реплика случайного бота; не повторяет уже сказанное в этом обсуждении. */
 export function botMessage(s: GameState): GameState {
   const bots = alivePlayers(s).filter((p) => !p.isHuman);
   if (bots.length === 0) return s;
-  const bot = pick(bots);
-  const others = alivePlayers(s).filter((p) => p.id !== bot.id);
-  const roll = rng.next();
-  let text: string;
 
-  const mine = KIND_ORDER.filter((k) => bot.revealed[k]).map((k) => bot.cards[k]);
-  const bestMine = mine.slice().sort((a, b) => b.value - a.value)[0];
-
-  if (roll < 0.35 && bestMine && bestMine.value > 0) {
-    text = `У меня «${bestMine.title}». Это пригодится бункеру.`;
-  } else if (roll < 0.7) {
-    const worst = others
-      .map((o) => ({ o, v: revealedValue(o), n: KIND_ORDER.filter((k) => o.revealed[k]).length }))
-      .filter((x) => x.n > 0)
-      .sort((a, b) => a.v - b.v)[0];
-    if (worst) {
-      const bad = KIND_ORDER.filter((k) => worst.o.revealed[k])
-        .map((k) => worst.o.cards[k])
-        .sort((a, b) => a.value - b.value)[0];
-      text = `${worst.o.name}, «${bad.title}» — это проблема для нас. Объясни.`;
-    } else {
-      text = 'Давайте не спешить, пока почти ничего не раскрыто.';
-    }
-  } else if (roll < 0.85) {
-    const need = pick(s.catastrophe.needs);
-    text = `Для этой катастрофы критична тема «${TAG_LABEL[need]}». Смотрите, у кого она есть.`;
-  } else {
-    const quiet = others.sort(
-      (a, b) =>
-        KIND_ORDER.filter((k) => a.revealed[k]).length - KIND_ORDER.filter((k) => b.revealed[k]).length,
-    )[0];
-    text = quiet ? `${quiet.name} пока молчит. Что скажешь в своё оправдание?` : 'Кто следующий?';
+  // Реплики текущего обсуждения: от конца чата до последнего системного сообщения.
+  const used = new Set<string>();
+  for (let i = s.chat.length - 1; i >= 0 && s.chat[i].authorId !== null; i--) {
+    used.add(s.chat[i].text);
   }
-  return withMessage(s, bot.id, text);
+  const last = s.chat[s.chat.length - 1];
+  const pool = bots.length > 1 && last && last.authorId ? bots.filter((b) => b.id !== last.authorId) : bots;
+
+  for (let attempt = 0; attempt < 14; attempt++) {
+    const bot = pick(pool);
+    const text = candidateLine(s, bot);
+    if (text && !used.has(text)) return withMessage(s, bot.id, text);
+  }
+  return s;
 }
 
 export function startVoting(s: GameState): GameState {
@@ -321,10 +394,6 @@ export function resolveRound(s: GameState): GameState {
       .map((p) => ({ p, votes: tally[p.id], tie: rng.next() }))
       .sort((a, b) => b.votes - a.votes || b.tie - a.tie);
 
-    for (let i = 0; i < order.length - 1; i++) {
-      if (order[i].votes === order[i + 1].votes && order[i].votes > 0) tieBroken = true;
-    }
-
     for (const { p } of order) {
       if (eliminated.length >= need) break;
       const shielded =
@@ -341,6 +410,15 @@ export function resolveRound(s: GameState): GameState {
       if (eliminated.length >= need) break;
       if (!eliminated.includes(p.id)) eliminated.push(p.id);
     }
+    // Жребий был, только если среди исключённых есть игрок с тем же числом голосов,
+    // что и у оставшегося (не защищённого щитом) игрока.
+    const lastOut = Math.min(...eliminated.map((id) => tally[id]));
+    tieBroken =
+      lastOut > 0 &&
+      order.some(
+        ({ p, votes }) =>
+          !eliminated.includes(p.id) && !shieldBlocked.includes(p.id) && votes === lastOut,
+      );
     players = players.map((x) =>
       eliminated.includes(x.id)
         ? {
