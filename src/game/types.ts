@@ -49,6 +49,8 @@ export interface Player {
   id: string;
   name: string;
   isHuman: boolean;
+  /** Силуэт на фото досье: «m0»…«m2», «f0»…«f2». Виден всем. */
+  photo: string;
   alive: boolean;
   cards: Record<CardKind, Card>;
   revealed: Record<CardKind, boolean>;
@@ -84,6 +86,14 @@ export interface FinalReport {
 }
 
 export interface GameState {
+  /** Кто управляет переходами между этапами. null — партия без ведущего. */
+  hostId: string | null;
+  /** Длительность обсуждения в секундах. */
+  discussionSeconds: number;
+  /** Момент (мс, Date.now), когда обсуждение закончится само. */
+  discussionEndsAt: number | null;
+  /** Когда очередной бот скажет реплику. */
+  nextBotChatAt: number | null;
   players: Player[];
   seats: number;
   round: number;

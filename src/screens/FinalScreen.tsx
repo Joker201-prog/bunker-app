@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DeskButton, Paper, Stamp, WoodHeading } from '../components/Desk';
+import { Paper, Stamp, WoodHeading } from '../components/Desk';
 import { Dossier } from '../components/Dossier';
 import { TAG_LABEL } from '../data/cards';
 import type { GameState } from '../game/types';
@@ -9,7 +9,9 @@ import { colors, fonts, spacing } from '../theme';
 
 interface Props {
   state: GameState;
-  onRestart: () => void;
+  viewerId: string;
+  /** Кнопки под отчётом: «Сыграть ещё раз», «Вернуть всех в лобби» и т. п. */
+  actions: React.ReactNode;
 }
 
 const VERDICT = {
@@ -18,13 +20,13 @@ const VERDICT = {
   fall: { word: 'Бункер пал', color: colors.stamp },
 };
 
-export function FinalScreen({ state, onRestart }: Props) {
+export function FinalScreen({ state, viewerId, actions }: Props) {
   const insets = useSafeAreaInsets();
   const report = state.final;
   if (!report) return null;
   const survivors = state.players.filter((p) => report.survivors.includes(p.id));
-  const human = state.players.find((p) => p.isHuman);
-  const humanIn = !!human && report.survivors.includes(human.id);
+  const me = state.players.find((p) => p.id === viewerId);
+  const humanIn = !!me && report.survivors.includes(me.id);
   const v = VERDICT[report.verdict];
   const numberOf = (id: string) => state.players.findIndex((p) => p.id === id) + 1;
 
@@ -43,7 +45,11 @@ export function FinalScreen({ state, onRestart }: Props) {
         <Stamp label={v.word} color={v.color} size={30} rotate="-7deg" style={styles.verdict} />
         <Text style={styles.text}>{report.headline}</Text>
         <Text style={[styles.text, styles.personal]}>
-          {humanIn ? 'Вы были внутри и пережили катастрофу вместе с группой.' : 'Вы остались за дверью.'}
+          {!me
+            ? 'Вы вели эту партию.'
+            : humanIn
+              ? 'Вы были внутри и пережили катастрофу вместе с группой.'
+              : 'Вы остались за дверью.'}
         </Text>
 
         <Text style={styles.label}>Что требовала катастрофа:</Text>
@@ -76,7 +82,7 @@ export function FinalScreen({ state, onRestart }: Props) {
         <Dossier key={p.id} player={p} number={numberOf(p.id)} showAll />
       ))}
 
-      <DeskButton label="Сыграть ещё раз" onPress={onRestart} style={styles.restart} />
+      <View style={styles.restart}>{actions}</View>
     </ScrollView>
   );
 }
@@ -114,5 +120,5 @@ const styles = StyleSheet.create({
   needMark: { width: 16, fontFamily: fonts.bold, fontSize: 16 },
   needText: { flex: 1, fontFamily: fonts.type, fontSize: 15, color: colors.ink },
   needState: { fontFamily: fonts.type, fontSize: 14 },
-  restart: { marginTop: spacing.lg },
+  restart: { marginTop: spacing.lg, gap: spacing.md },
 });

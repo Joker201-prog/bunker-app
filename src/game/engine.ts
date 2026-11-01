@@ -73,8 +73,26 @@ export function seatsFor(playerCount: number): number {
   return Math.floor(playerCount / 2);
 }
 
-export function newGame(opts: { humanName: string; players: number }): GameState {
-  const count = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, Math.floor(opts.players)));
+/** Участник партии до раздачи карт. */
+export interface Participant {
+  id: string;
+  name: string;
+  isHuman: boolean;
+  /** Пол для карты биологии; если не задан — случайный. */
+  male?: boolean;
+}
+
+export const DEFAULT_DISCUSSION_SECONDS = 60;
+
+/** Раздаёт карты участникам и создаёт партию. */
+export function createGame(
+  participants: Participant[],
+  opts: { hostId?: string | null; discussionSeconds?: number } = {},
+): GameState {
+  const count = participants.length;
+  if (count < MIN_PLAYERS || count > MAX_PLAYERS) {
+    throw new Error(`В партии должно быть от ${MIN_PLAYERS} до ${MAX_PLAYERS} игроков`);
+  }
   const seats = seatsFor(count);
 
   const draw: Record<Exclude<CardKind, 'biology'>, () => Card> = {
@@ -86,13 +104,8 @@ export function newGame(opts: { humanName: string; players: number }): GameState
     special: makeDeck(SPECIALS),
   };
 
-  const humanName = opts.humanName.trim() || DEFAULT_HUMAN_NAME;
-  const names = shuffle(BOT_NAMES).filter((n) => n.name !== humanName);
-  const players: Player[] = [];
-  for (let i = 0; i < count; i++) {
-    const isHuman = i === 0;
-    const bot = isHuman ? null : names[(i - 1) % names.length];
-    const male = bot ? bot.male : chance(0.5);
+  const players: Player[] = participants.map((part, i) => {
+    const male = part.male ?? chance(0.5);
     const cards = {
       profession: draw.profession(),
       biology: makeBiology(male),
@@ -102,10 +115,11 @@ export function newGame(opts: { humanName: string; players: number }): GameState
       baggage: draw.baggage(),
       special: draw.special(),
     } as Record<CardKind, Card>;
-    players.push({
-      id: isHuman ? 'human' : `bot${i}`,
-      name: isHuman ? humanName : (bot as { name: string }).name,
-      isHuman,
+    return {
+      id: part.id,
+      name: part.name,
+      isHuman: part.isHuman,
+      photo: `${male ? 'm' : 'f'}${(i + Math.floor(rng.next() * 3)) % 3}`,
       alive: true,
       cards,
       revealed: {
@@ -118,11 +132,15 @@ export function newGame(opts: { humanName: string; players: number }): GameState
         special: false,
       },
       shieldUsed: false,
-    });
-  }
+    };
+  });
 
   const bunker: BunkerCard[] = shuffle(BUNKER_CARDS).slice(0, 3);
   return {
+    hostId: opts.hostId ?? null,
+    discussionSeconds: opts.discussionSeconds ?? DEFAULT_DISCUSSION_SECONDS,
+    discussionEndsAt: null,
+    nextBotChatAt: null,
     players,
     seats,
     round: 1,
@@ -139,6 +157,25 @@ export function newGame(opts: { humanName: string; players: number }): GameState
     results: [],
     final: null,
   };
+}
+
+/** Свободные имена ботов, которых ещё нет среди занятых имён. */
+export function freeBotNames(taken: string[]): { name: string; male: boolean }[] {
+  const lower = new Set(taken.map((n) => n.trim().toLowerCase()));
+  return BOT_NAMES.filter((b) => !lower.has(b.name.toLowerCase()));
+}
+
+/** Одиночная партия: игрок с id «human» против ботов, игрок же и ведущий. */
+export function newGame(opts: { humanName: string; players: number }): GameState {
+  const count = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, Math.floor(opts.players)));
+  const humanName = opts.humanName.trim() || DEFAULT_HUMAN_NAME;
+  const bots = shuffle(freeBotNames([humanName]));
+  const participants: Participant[] = [{ id: 'human', name: humanName, isHuman: true }];
+  for (let i = 1; i < count; i++) {
+    const b = bots[(i - 1) % bots.length];
+    participants.push({ id: `bot${i}`, name: b.name, isHuman: false, male: b.male });
+  }
+  return createGame(participants, { hostId: 'human' });
 }
 
 export function alivePlayers(s: GameState): Player[] {
@@ -209,20 +246,43 @@ export function botsReveal(s: GameState): GameState {
   return cur;
 }
 
-export function canLeaveTable(s: GameState): boolean {
-  const human = s.players.find((p) => p.isHuman);
-  if (!human || !human.alive) return true;
-  return !!s.revealedThisRound[human.id];
+/** Живые люди, которые ещё не раскрыли карту в этом раунде. */
+export function pendingReveals(s: GameState): Player[] {
+  if (s.stage !== 'table') return [];
+  return alivePlayers(s).filter((p) => p.isHuman && !s.revealedThisRound[p.id] && revealableKinds(s, p).length > 0);
 }
 
-export function startDiscussion(s: GameState): GameState {
+/** Может ли игрок перейти к обсуждению (раскрыл карту, выбыл или не участвует). */
+export function canLeaveTable(s: GameState, playerId = 'human'): boolean {
+  const p = s.players.find((x) => x.id === playerId);
+  if (!p || !p.alive) return true;
+  return !!s.revealedThisRound[p.id] || revealableKinds(s, p).length === 0;
+}
+
+/** Людям, не успевшим выбрать, система раскрывает первую доступную карту. */
+function autoRevealHumans(s: GameState): GameState {
+  let cur = s;
+  for (const p of pendingReveals(s)) {
+    const kinds = revealableKinds(cur, playerById(cur, p.id));
+    if (kinds.length) cur = revealCard(cur, p.id, kinds[0]);
+  }
+  return cur;
+}
+
+export function startDiscussion(s: GameState, now: number = Date.now()): GameState {
   if (s.stage !== 'table') return s;
-  const afterBots = botsReveal(s);
-  return withMessage(
-    { ...afterBots, stage: 'discussion' },
-    null,
-    `Раунд ${s.round}. Обсуждение началось. Мест в бункере: ${s.seats}.`,
-  );
+  const late = pendingReveals(s).map((p) => p.name);
+  const revealed = botsReveal(autoRevealHumans(s));
+  let next: GameState = {
+    ...revealed,
+    stage: 'discussion',
+    discussionEndsAt: now + revealed.discussionSeconds * 1000,
+    nextBotChatAt: now + 2500,
+  };
+  if (late.length) {
+    next = withMessage(next, null, `Не успели выбрать карту — раскрыта автоматически: ${late.join(', ')}.`);
+  }
+  return withMessage(next, null, `Раунд ${s.round}. Обсуждение началось. Мест в бункере: ${s.seats}.`);
 }
 
 function revealedValue(p: Player): number {
@@ -324,10 +384,14 @@ export function botMessage(s: GameState): GameState {
 
 export function startVoting(s: GameState): GameState {
   if (s.stage !== 'discussion') return s;
-  if (eliminationsThisRound(s) === 0) {
-    return resolveRound({ ...s, stage: 'voting', votes: {} });
-  }
-  return { ...s, stage: 'voting', votes: {} };
+  const base: GameState = { ...s, stage: 'voting', votes: {}, discussionEndsAt: null, nextBotChatAt: null };
+  if (eliminationsThisRound(s) === 0) return resolveRound(base);
+  return base;
+}
+
+/** Все живые люди проголосовали. */
+export function allHumansVoted(s: GameState): boolean {
+  return alivePlayers(s).every((p) => !p.isHuman || !!s.votes[p.id]);
 }
 
 export function castVote(s: GameState, voterId: string, targetId: string): GameState {
@@ -366,10 +430,6 @@ export function botsVote(s: GameState): GameState {
   return cur;
 }
 
-export function humanHasVoted(s: GameState): boolean {
-  const human = s.players.find((p) => p.isHuman);
-  return !human || !human.alive || !!s.votes[human.id];
-}
 
 export function resolveRound(s: GameState): GameState {
   if (s.stage !== 'voting') return s;

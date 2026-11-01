@@ -21,9 +21,9 @@ interface Props {
 }
 
 function photoFor(p: Player) {
-  const male = p.cards.biology.title.startsWith('Мужчина');
-  const set = male ? images.photos.m : images.photos.f;
-  return set[hashIndex(p.id + p.name, set.length)];
+  const set = p.photo && p.photo[0] === 'f' ? images.photos.f : images.photos.m;
+  const idx = Number(p.photo ? p.photo.slice(1) : hashIndex(p.id, set.length)) || 0;
+  return set[idx % set.length];
 }
 
 /** Ширина «вымаранной» строки: своя для каждой карты, чтобы не выглядело как шаблон. */
