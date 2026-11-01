@@ -2,7 +2,7 @@
   "expo": {
     "name": "Убежище",
     "slug": "ubezhishe",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#2b1d13",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "ru.ubezhishe.bunker",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2b1d13"

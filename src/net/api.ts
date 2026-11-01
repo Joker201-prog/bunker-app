@@ -2,7 +2,7 @@
 import type { RoomAction, RoomSettings, RoomView } from '../game/room';
 
 /** Адрес сервера по умолчанию. Можно поменять на главном экране. */
-export const DEFAULT_SERVER = '';
+export const DEFAULT_SERVER = 'https://ubezhishe.onrender.com';
 
 /**
  * Бесплатный сервер засыпает без игроков и просыпается до минуты,
