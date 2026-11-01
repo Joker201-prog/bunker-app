@@ -103,7 +103,7 @@ export function HomeScreen({
           <TextInput
             value={server}
             onChangeText={onServer}
-            placeholder="например, ubezhishe-pavel.amvera.io"
+            placeholder="например, ubezhishe.onrender.com"
             placeholderTextColor={colors.inkSoft}
             autoCapitalize="none"
             autoCorrect={false}
@@ -225,6 +225,7 @@ export function CreateRoomScreen({
         onPress={() => onCreate({ hostMode, hostPlays, discussionSeconds: seconds })}
         style={styles.btnBig}
       />
+      {busy && <Text style={styles.wake}>Если сервер спал, первое подключение займёт до минуты.</Text>}
     </MenuLayout>
   );
 }
@@ -285,6 +286,7 @@ export function JoinScreen({
         onPress={() => onJoin(code)}
         style={styles.btnBig}
       />
+      {busy && <Text style={styles.wake}>Если сервер спал, первое подключение займёт до минуты.</Text>}
     </MenuLayout>
   );
 }
@@ -365,6 +367,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginTop: spacing.sm,
   },
+  wake: { fontFamily: fonts.type, fontSize: 13, lineHeight: 19, color: colors.onWoodMuted, textAlign: 'center', marginTop: spacing.md },
   serverToggle: { marginTop: spacing.xl, alignSelf: 'center' },
   serverToggleText: { fontFamily: fonts.type, fontSize: 13, color: colors.onWoodMuted, textDecorationLine: 'underline', textAlign: 'center' },
   serverBox: { marginTop: spacing.md },

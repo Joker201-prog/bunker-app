@@ -4,6 +4,12 @@ import type { RoomAction, RoomSettings, RoomView } from '../game/room';
 /** Адрес сервера по умолчанию. Можно поменять на главном экране. */
 export const DEFAULT_SERVER = '';
 
+/**
+ * Бесплатный сервер засыпает без игроков и просыпается до минуты,
+ * поэтому создание комнаты и вход ждут ответа дольше обычного.
+ */
+const WAKE_TIMEOUT_MS = 75_000;
+
 export interface Session {
   server: string;
   code: string;
@@ -56,14 +62,17 @@ const json = (body: unknown): RequestInit => ({
 });
 
 export async function createRoom(server: string, name: string, settings: Partial<RoomSettings>): Promise<Session> {
-  const r = await request<{ code: string; playerId: string; token: string }>(`${server}/api/rooms`, json({ name, settings }));
+  const r = await request<{ code: string; playerId: string; token: string }>(`${server}/api/rooms`, {
+    ...json({ name, settings }),
+    timeoutMs: WAKE_TIMEOUT_MS,
+  });
   return { server, code: r.code, playerId: r.playerId, token: r.token };
 }
 
 export async function joinRoom(server: string, code: string, name: string): Promise<Session> {
   const r = await request<{ code: string; playerId: string; token: string }>(
     `${server}/api/rooms/${encodeURIComponent(code)}/join`,
-    json({ name }),
+    { ...json({ name }), timeoutMs: WAKE_TIMEOUT_MS },
   );
   return { server, code: r.code, playerId: r.playerId, token: r.token };
 }
@@ -81,5 +90,5 @@ export async function pollState(s: Session, since: number): Promise<RoomView> {
 }
 
 export async function checkServer(server: string): Promise<void> {
-  await request(`${server}/health`, { timeoutMs: 8000 });
+  await request(`${server}/health`, { timeoutMs: WAKE_TIMEOUT_MS });
 }

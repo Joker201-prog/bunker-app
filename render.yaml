@@ -1,0 +1,16 @@
+# Сервер «Убежища» на Render (бесплатный тариф). Render → New → Blueprint → этот репозиторий.
+services:
+  - type: web
+    name: ubezhishe
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    # Пересобирать сервер только при изменении серверного кода, а не картинок и экранов.
+    buildFilter:
+      paths:
+        - server/**
+        - src/game/**
+        - src/data/**
+        - Dockerfile
