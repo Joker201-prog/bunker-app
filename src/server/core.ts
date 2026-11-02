@@ -72,6 +72,11 @@ export class GameServer {
   constructor(private opts: CoreOptions) {}
 
   /** Запустить таймеры: ход партий (таймер обсуждения, боты) и уборку брошенных комнат. */
+  /** Есть ли комната с таким кодом (для страницы приглашения). */
+  hasRoom(code: string): boolean {
+    return this.rooms.has(code);
+  }
+
   start() {
     this.timers.push(setInterval(() => this.tickGames(), 500));
     this.timers.push(setInterval(() => this.housekeeping(), 5000));

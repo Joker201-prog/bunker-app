@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, ScrollView, Share, StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { DeskButton, Paper, Stamp, Tape } from '../components/Desk';
@@ -7,6 +7,7 @@ import { secondsLeft } from '../game/actions';
 import { MIN_PLAYERS } from '../game/engine';
 import { lobbyAdmin, type RoomAction, type RoomView } from '../game/room';
 import type { Session } from '../net/api';
+import { inviteMessage } from '../net/invite';
 import { useRoom } from '../net/useRoom';
 import { colors, fonts, spacing } from '../theme';
 import { GameScreen } from './GameScreen';
@@ -111,6 +112,7 @@ export function RoomScreen({
       view={view}
       lan={!!session.lan}
       lanHost={!!session.lanHost}
+      server={session.server}
       linkOk={link !== 'offline'}
       error={error}
       run={run}
@@ -123,6 +125,7 @@ function Lobby({
   view,
   lan,
   lanHost,
+  server,
   linkOk,
   error,
   run,
@@ -131,6 +134,7 @@ function Lobby({
   view: RoomView;
   lan: boolean;
   lanHost: boolean;
+  server: string;
   linkOk: boolean;
   error: string | null;
   run: (a: RoomAction) => Promise<string | null>;
@@ -142,6 +146,10 @@ function Lobby({
   const voteMode = view.settings.hostMode === 'vote';
   const participants = view.members.length - (view.settings.hostPlays ? 0 : 1);
   const canStart = participants >= MIN_PLAYERS;
+
+  function invite() {
+    Share.share({ message: inviteMessage({ code: view.code, server, lan }) }).catch(() => {});
+  }
 
   function confirmLeave() {
     Alert.alert(
@@ -208,8 +216,9 @@ function Lobby({
       <Text style={styles.woodNote}>
         {lan
           ? 'Сообщите код друзьям: «Войти по коду», подключившись к той же Wi-Fi сети или к точке доступа этого телефона.'
-          : 'Сообщите код друзьям: в приложении «Войти по коду».'}
+          : 'Отправьте друзьям приглашение: по ссылке приложение само откроет эту комнату. Или сообщите код — «Войти по коду».'}
       </Text>
+      <DeskButton label="Пригласить друзей" variant="secondary" onPress={invite} style={styles.inviteBtn} />
       {lanHost && (
         <Text style={styles.hostWarn}>
           Комнату держит этот телефон. Не сворачивайте приложение и не блокируйте экран, пока идёт игра.
@@ -271,6 +280,7 @@ function Lobby({
 }
 
 const styles = StyleSheet.create({
+  inviteBtn: { marginBottom: spacing.md },
   container: { paddingHorizontal: spacing.xl },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   loadingText: { fontFamily: fonts.type, fontSize: 15, color: colors.onWood, marginTop: spacing.lg, textAlign: 'center' },

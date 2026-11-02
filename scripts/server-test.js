@@ -30,6 +30,14 @@ async function main() {
       check(j.ok, 'вход ' + name);
       clients.push(j);
     }
+    // Страница приглашения
+    const page = await fetch(`${BASE}/j/${code}`);
+    const html = await page.text();
+    check(page.headers.get('content-type').startsWith('text/html'), 'приглашение — html');
+    check(html.includes(`>${code}<`) && html.includes('Открыть в приложении') && html.includes('scheme=ubezhishe'), 'приглашение: код и кнопка');
+    const noRoom = await (await fetch(`${BASE}/j/0000`)).text();
+    check(noRoom.includes("уже нет") && !noRoom.includes('Открыть в приложении'), 'приглашение в несуществующую комнату');
+    check((await fetch(`${BASE}/j/12a4`)).status !== 200 || !(await (await fetch(`${BASE}/j/12a4`)).text()).includes('<html'), 'неверный код — не страница');
     const bad = await post('/api/rooms/0000/join', { name: 'x' });
     check(!bad.ok, 'вход в несуществующую комнату');
     const forged = await act({ code, token: 'fake' }, { type: 'start' });

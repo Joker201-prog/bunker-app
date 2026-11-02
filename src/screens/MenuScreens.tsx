@@ -287,6 +287,10 @@ function Choice({ title, text, selected, onPress }: { title: string; text: strin
 /* ---------------- Вход по коду ---------------- */
 
 export function JoinScreen({
+  initialCode,
+  invited,
+  name,
+  onName,
   busy,
   progress,
   error,
@@ -295,6 +299,12 @@ export function JoinScreen({
   onJoin,
   onBack,
 }: {
+  /** Код из ссылки-приглашения. */
+  initialCode?: string;
+  /** Открыто по приглашению: адрес сервера уже подставлен. */
+  invited?: boolean;
+  name: string;
+  onName: (v: string) => void;
   busy: boolean;
   /** Текст хода поиска комнаты в сети. */
   progress: string | null;
@@ -304,7 +314,7 @@ export function JoinScreen({
   onJoin: (code: string) => void;
   onBack: () => void;
 }) {
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(initialCode ?? '');
   const lan = code.length === 5;
   const online = code.length === 4;
   const needServer = online && !server.trim();
@@ -312,6 +322,19 @@ export function JoinScreen({
     <MenuLayout onBack={onBack}>
       <Text style={styles.heading}>Вход в комнату</Text>
       <Paper rotate="0.8deg" style={styles.form}>
+        {invited && (
+          <>
+            <Text style={styles.label}>Фамилия, имя:</Text>
+            <TextInput
+              value={name}
+              onChangeText={onName}
+              placeholder="как вас называть"
+              placeholderTextColor={colors.inkSoft}
+              style={[styles.input, styles.gapBottom]}
+              maxLength={16}
+            />
+          </>
+        )}
         <Text style={styles.label}>Код комнаты:</Text>
         <TextInput
           value={code}
@@ -321,10 +344,12 @@ export function JoinScreen({
           keyboardType="number-pad"
           maxLength={5}
           style={styles.codeInput}
-          autoFocus
+          autoFocus={!initialCode}
         />
         <Text style={styles.hint}>
-          {lan
+          {invited && online && code === initialCode
+            ? 'Вас пригласили в комнату — адрес сервера уже подставлен. Нажмите «Войти».'
+            : lan
             ? 'Пять цифр — комната в Wi-Fi сети. Подключитесь к той же сети, что и ведущий.'
             : online
               ? 'Четыре цифры — комната через интернет.'
@@ -387,6 +412,7 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center', marginTop: spacing.md },
   form: { marginBottom: spacing.lg },
   gapTop: { marginTop: spacing.lg },
+  gapBottom: { marginBottom: spacing.lg },
   label: { fontFamily: fonts.type, fontSize: 14, color: colors.inkSoft, marginBottom: 2 },
   hint: { fontFamily: fonts.type, fontSize: 12, lineHeight: 17, color: colors.inkSoft, marginTop: spacing.sm },
   input: {

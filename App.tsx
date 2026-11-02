@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, ImageBackground, StatusBar, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, ImageBackground, Linking, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { Oswald_500Medium, Oswald_700Bold } from '@expo-google-fonts/oswald';
@@ -12,6 +12,7 @@ import type { RoomSettings } from './src/game/room';
 import type { GameState } from './src/game/types';
 import { LOCAL_PLAYER, useLocalGame } from './src/hooks/useLocalGame';
 import { createRoom, DEFAULT_SERVER, joinRoom, normalizeServer, type Session } from './src/net/api';
+import { parseInvite } from './src/net/invite';
 import { findLanRoom, startLanHost, stopLanHost } from './src/net/lan';
 import { loadSaved, saveSaved } from './src/net/storage';
 import { GameScreen } from './src/screens/GameScreen';
@@ -26,7 +27,7 @@ type Screen =
   | { name: 'localSetup' }
   | { name: 'local'; game: GameState; key: number; players: number }
   | { name: 'create' }
-  | { name: 'join' }
+  | { name: 'join'; code?: string; invited?: boolean }
   | { name: 'room'; session: Session };
 
 export default function App() {
@@ -45,12 +46,37 @@ export default function App() {
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const screenRef = useRef<Screen>(screen);
+  screenRef.current = screen;
+
+  // Приглашение по ссылке: ubezhishe://join?server=…&code=1234 — открываем вход с готовым кодом и адресом.
+  function openInvite(url: string | null) {
+    const invite = parseInvite(url);
+    if (!invite) return;
+    const cur = screenRef.current.name;
+    if (cur === 'room' || cur === 'local') {
+      Alert.alert('Приглашение в комнату ' + invite.code, 'Сначала выйдите из текущей игры, затем откройте ссылку снова.');
+      return;
+    }
+    setServer(invite.server);
+    saveSaved({ server: invite.server });
+    setError(null);
+    setScreen({ name: 'join', code: invite.code, invited: true });
+  }
+
   useEffect(() => {
-    loadSaved().then((s) => {
-      if (s.name) setName(s.name);
-      if (s.server) setServer(s.server);
-      if (s.session) setSaved(s.session);
-    });
+    loadSaved()
+      .then((s) => {
+        if (s.name) setName(s.name);
+        if (s.server) setServer(s.server);
+        if (s.session) setSaved(s.session);
+      })
+      .then(() => Linking.getInitialURL())
+      .then(openInvite)
+      .catch(() => {});
+    const sub = Linking.addEventListener('url', (e: { url: string }) => openInvite(e.url));
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function go(next: Screen) {
@@ -180,6 +206,14 @@ export default function App() {
     case 'join':
       content = (
         <JoinScreen
+          key={screen.code ?? 'join'}
+          initialCode={screen.code}
+          invited={screen.invited}
+          name={name}
+          onName={(v) => {
+            setName(v);
+            saveSaved({ name: v });
+          }}
           busy={busy}
           progress={progress}
           error={error}
