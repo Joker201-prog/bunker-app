@@ -2,16 +2,18 @@ import {
   BAGGAGE,
   BUNKER_CARDS,
   CATASTROPHES,
+  CHARACTERS,
   FACTS,
   HEALTH,
   HOBBIES,
   KIND_ORDER,
+  PHOBIAS,
   PROFESSIONS,
   SPECIALS,
   TAG_LABEL,
-  makeBiology,
+  biologyDeck,
 } from '../data/cards';
-import { chance, int, pick, rng, shuffle } from './rng';
+import { chance, pick, rng, shuffle } from './rng';
 import type {
   BunkerCard,
   Card,
@@ -98,14 +100,18 @@ export function createGame(
   }
   const seats = seatsFor(count);
 
+  // Колоды без повторов внутри партии; биология — отдельно для мужчин и женщин.
   const draw: Record<Exclude<CardKind, 'biology'>, () => Card> = {
     profession: makeDeck(PROFESSIONS),
     health: makeDeck(HEALTH),
-    fact: makeDeck(FACTS),
+    phobia: makeDeck(PHOBIAS),
+    character: makeDeck(CHARACTERS),
     hobby: makeDeck(HOBBIES),
+    fact: makeDeck(FACTS),
     baggage: makeDeck(BAGGAGE),
     special: makeDeck(SPECIALS),
   };
+  const bioDeck = { m: makeDeck(biologyDeck(true)), f: makeDeck(biologyDeck(false)) };
 
   // Аватары раздаются из перемешанной колоды отдельно для мужчин и женщин,
   // поэтому в партии они не повторяются, пока хватает портретов.
@@ -117,10 +123,12 @@ export function createGame(
     const male = part.male ?? chance(0.5);
     const cards = {
       profession: draw.profession(),
-      biology: makeBiology(male),
+      biology: bioDeck[male ? 'm' : 'f'](),
       health: draw.health(),
-      fact: draw.fact(),
+      phobia: draw.phobia(),
+      character: draw.character(),
       hobby: draw.hobby(),
+      fact: draw.fact(),
       baggage: draw.baggage(),
       special: draw.special(),
     } as Record<CardKind, Card>;
@@ -131,15 +139,7 @@ export function createGame(
       photo: `${male ? 'm' : 'f'}${avatarDeck[male ? 'm' : 'f']()}`,
       alive: true,
       cards,
-      revealed: {
-        profession: false,
-        biology: false,
-        health: false,
-        fact: false,
-        hobby: false,
-        baggage: false,
-        special: false,
-      },
+      revealed: Object.fromEntries(KIND_ORDER.map((k) => [k, false])) as Record<CardKind, boolean>,
       shieldUsed: false,
     };
   });
@@ -157,7 +157,6 @@ export function createGame(
     elimsPerRound: distributeEliminations(count - seats, TOTAL_ROUNDS),
     stage: 'table',
     catastrophe: pick(CATASTROPHES),
-    catastropheYears: int(2, 15),
     bunker,
     votes: {},
     revealedThisRound: {},
@@ -493,15 +492,7 @@ export function resolveRound(s: GameState): GameState {
         ? {
             ...x,
             alive: false,
-            revealed: {
-              profession: true,
-              biology: true,
-              health: true,
-              fact: true,
-              hobby: true,
-              baggage: true,
-              special: true,
-            },
+            revealed: Object.fromEntries(KIND_ORDER.map((k) => [k, true])) as Record<CardKind, boolean>,
           }
         : x,
     );
@@ -536,6 +527,20 @@ export function nextRound(s: GameState): GameState {
   return withMessage(next, null, `Начинается раунд ${next.round}.`);
 }
 
+/** Пороги итога относительно ориентира base (подобраны симуляцией scripts/simulate.js). */
+export const THRIVE_K = 1.0;
+export const SURVIVE_K = 0.6;
+
+export function monthsText(m: number): string {
+  if (m % 12 === 0 && m >= 12) {
+    const y = m / 12;
+    const w = y % 10 === 1 && y % 100 !== 11 ? 'год' : [2, 3, 4].includes(y % 10) && ![12, 13, 14].includes(y % 100) ? 'года' : 'лет';
+    return `${y} ${w}`;
+  }
+  const w = m % 10 === 1 && m % 100 !== 11 ? 'месяц' : [2, 3, 4].includes(m % 10) && ![12, 13, 14].includes(m % 100) ? 'месяца' : 'месяцев';
+  return `${m} ${w}`;
+}
+
 function buildFinal(s: GameState): FinalReport {
   const survivors = alivePlayers(s);
   const provided = new Set<Tag>();
@@ -558,16 +563,19 @@ function buildFinal(s: GameState): FinalReport {
   for (const need of s.catastrophe.needs) {
     (provided.has(need) ? covered : missing).push(need);
   }
+  // Остальные ценные при этой катастрофе темы дают небольшой бонус.
+  const extraValued = s.catastrophe.valued.filter((t) => !s.catastrophe.needs.includes(t) && provided.has(t)).length;
 
-  const score = cardScore + bunkerScore + covered.length * 4 - missing.length * 6;
-  const base = survivors.length * 8;
+  const score = cardScore + bunkerScore + covered.length * 4 + extraValued * 2 - missing.length * 6;
+  // Чем тяжелее катастрофа (1–3), тем больше нужно набрать.
+  const base = survivors.length * (4 + s.catastrophe.difficulty);
 
   let verdict: FinalReport['verdict'];
-  if (missing.length === 0 && score >= base * 1.05) verdict = 'thrive';
-  else if (score >= base * 0.8 && missing.length <= 1) verdict = 'survive';
+  if (missing.length === 0 && score >= base * THRIVE_K) verdict = 'thrive';
+  else if (score >= base * SURVIVE_K && missing.length <= 1) verdict = 'survive';
   else verdict = 'fall';
 
-  const years = s.catastropheYears;
+  const term = monthsText(s.catastrophe.months);
   const lines: string[] = [];
   for (const need of covered) {
     const hero = survivors.find((p) => p.cards.profession.tags.includes(need)) ??
@@ -591,11 +599,11 @@ function buildFinal(s: GameState): FinalReport {
 
   let headline: string;
   if (verdict === 'thrive') {
-    headline = `Бункер выжил и процветает. Через ${years} лет люди вышли на поверхность.`;
+    headline = `Бункер выжил и процветает. Через ${term} люди вышли на поверхность.`;
   } else if (verdict === 'survive') {
-    headline = `Бункер выжил, но дорогой ценой. Через ${years} лет вышла лишь часть группы.`;
+    headline = `Бункер выжил, но дорогой ценой. Через ${term} вышла лишь часть группы.`;
   } else {
-    headline = `Бункер не выдержал. Группа погибла, не дожив до конца катастрофы (${years} лет).`;
+    headline = `Бункер не выдержал. Группа погибла, не дождавшись конца катастрофы (нужно было продержаться ${term}).`;
   }
 
   return {

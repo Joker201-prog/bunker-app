@@ -1,6 +1,6 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { KIND_LABEL, KIND_ORDER } from '../data/cards';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CARD_TEXT, KIND_LABEL, KIND_ORDER } from '../data/cards';
 import type { CardKind, Player } from '../game/types';
 import { colors, fonts, hashIndex, images, spacing, tilt } from '../theme';
 import { Paper, Stamp } from './Desk';
@@ -24,6 +24,13 @@ function photoFor(p: Player) {
   const set = p.photo && p.photo[0] === 'f' ? images.photos.f : images.photos.m;
   const idx = Number(p.photo ? p.photo.slice(1) : hashIndex(p.id, set.length)) || 0;
   return set[idx % set.length];
+}
+
+/** Полное описание карты из библиотеки. */
+function showDetails(kind: CardKind, title: string, id: string | undefined) {
+  const text = id ? CARD_TEXT[id] : undefined;
+  if (!text) return;
+  Alert.alert(`${KIND_LABEL[kind]}: ${title}`, text);
 }
 
 /** Ширина «вымаранной» строки: своя для каждой карты, чтобы не выглядело как шаблон. */
@@ -73,13 +80,25 @@ export function Dossier({
             const open = player.revealed[kind];
             const visible = open || showAll;
             const canReveal = revealable.includes(kind);
-            const Line: any = canReveal ? Pressable : View;
+            const hasDetails = visible && !!card.id && !!CARD_TEXT[card.id];
+            // Нажатие: раскрыть карту (если можно) или прочитать описание.
+            // Когда всё досье нажимается (голосование), описание открывается долгим нажатием.
+            const tapDetails = hasDetails && !canReveal && !onPress;
+            const Line: any = canReveal || hasDetails ? Pressable : View;
             return (
               <Line
                 key={kind}
-                onPress={canReveal ? () => onReveal && onReveal(kind) : undefined}
-                accessibilityRole={canReveal ? 'button' : undefined}
+                onPress={
+                  canReveal
+                    ? () => onReveal && onReveal(kind)
+                    : tapDetails
+                      ? () => showDetails(kind, card.title, card.id)
+                      : undefined
+                }
+                onLongPress={hasDetails ? () => showDetails(kind, card.title, card.id) : undefined}
+                accessibilityRole={canReveal || tapDetails ? 'button' : undefined}
                 accessibilityLabel={canReveal ? `Раскрыть: ${KIND_LABEL[kind]}` : undefined}
+                accessibilityHint={hasDetails ? 'Открывает полное описание карты' : undefined}
                 style={[styles.line, canReveal && styles.lineAction]}
               >
                 <Text style={[styles.mark, { color: card.value > 0 ? colors.good : colors.bad }]}>

@@ -2,39 +2,68 @@ export type CardKind =
   | 'profession'
   | 'biology'
   | 'health'
-  | 'fact'
+  | 'phobia'
+  | 'character'
   | 'hobby'
+  | 'fact'
   | 'baggage'
   | 'special';
 
+/** Темы, нужные для выживания (общие для всей библиотеки карт). */
 export type Tag =
   | 'medicine'
+  | 'engineering'
   | 'food'
-  | 'energy'
-  | 'tech'
   | 'defense'
-  | 'psychology'
-  | 'labor'
+  | 'radiation'
+  | 'chemistry'
+  | 'biology'
+  | 'energy'
   | 'water'
-  | 'education'
-  | 'children';
+  | 'psychology'
+  | 'communication'
+  | 'construction'
+  | 'transport'
+  | 'leadership'
+  | 'science'
+  | 'craft';
 
 export type CardEffect = 'doubleVote' | 'shield';
 
 export interface Card {
+  /** id из библиотеки; по нему берётся полное описание (CARD_TEXT). Пусто у скрытых чужих карт. */
+  id?: string;
   kind: CardKind;
   title: string;
-  /** Short explanation shown under the title (used for special cards). */
+  /** Текст на самой карте (у особых условий — что она делает). */
   note?: string;
-  /** How useful the card is for survival: from -3 (terrible) to +3 (great). */
+  /** Польза для выживания: от −3 до +3 (полезность 1–5 из библиотеки). */
   value: number;
   tags: Tag[];
   effect?: CardEffect;
 }
 
 export interface Catastrophe {
+  id: string;
   title: string;
+  /** Тип события: природная, техногенная… */
+  kind: string;
+  difficulty: number;
+  /** Что случилось. */
   text: string;
+  population: string;
+  survivors: string;
+  survivorsPercent: number;
+  /** Сколько месяцев сидеть в бункере, и почему. */
+  months: number;
+  monthsReason: string;
+  /** Что творится снаружи. */
+  outside: string;
+  problems: string[];
+  /** Что ценится и что бесполезно при этой катастрофе. */
+  valued: Tag[];
+  useless: Tag[];
+  /** Главное для выживания: без этих тем группе тяжело. */
   needs: Tag[];
 }
 
@@ -49,7 +78,7 @@ export interface Player {
   id: string;
   name: string;
   isHuman: boolean;
-  /** Силуэт на фото досье: «m0»…«m2», «f0»…«f2». Виден всем. */
+  /** Портрет в досье: «m0»…«m5», «f0»…«f5». Виден всем. */
   photo: string;
   alive: boolean;
   cards: Record<CardKind, Card>;
@@ -101,7 +130,6 @@ export interface GameState {
   elimsPerRound: number[];
   stage: Stage;
   catastrophe: Catastrophe;
-  catastropheYears: number;
   bunker: BunkerCard[];
   /** voterId -> targetId for the current voting. */
   votes: Record<string, string>;

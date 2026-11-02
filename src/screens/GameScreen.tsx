@@ -362,6 +362,7 @@ function TableStage({
   return (
     <View>
       <Text style={styles.woodText}>{hint}</Text>
+      {game.round === 1 && <Text style={styles.woodNote}>Нажмите на открытую карту, чтобы прочитать её полное описание.</Text>}
       {me && (
         <>
           <WoodHeading>Ваше досье</WoodHeading>
