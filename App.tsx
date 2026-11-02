@@ -40,7 +40,8 @@ export default function App() {
   });
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [name, setName] = useState('');
-  const [server, setServer] = useState(DEFAULT_SERVER);
+  /** Сервер из ссылки-приглашения, если он не встроенный (например, сервер на компьютере). */
+  const [inviteServer, setInviteServer] = useState<string | null>(null);
   const [saved, setSaved] = useState<Session | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
@@ -58,8 +59,7 @@ export default function App() {
       Alert.alert('Приглашение в комнату ' + invite.code, 'Сначала выйдите из текущей игры, затем откройте ссылку снова.');
       return;
     }
-    setServer(invite.server);
-    saveSaved({ server: invite.server });
+    setInviteServer(invite.server === DEFAULT_SERVER ? null : invite.server);
     setError(null);
     setScreen({ name: 'join', code: invite.code, invited: true });
   }
@@ -68,7 +68,6 @@ export default function App() {
     loadSaved()
       .then((s) => {
         if (s.name) setName(s.name);
-        if (s.server) setServer(s.server);
         if (s.session) setSaved(s.session);
       })
       .then(() => Linking.getInitialURL())
@@ -93,11 +92,6 @@ export default function App() {
     go({ name: 'room', session });
   }
 
-  function updateServer(v: string) {
-    setServer(v);
-    saveSaved({ server: v.trim() });
-  }
-
   async function attempt(fn: (playerName: string) => Promise<Session>) {
     setBusy(true);
     setProgress(null);
@@ -113,14 +107,12 @@ export default function App() {
   }
 
   function onlineServer(): string {
-    const srv = normalizeServer(server);
-    if (!srv) throw new Error('Укажите адрес сервера.');
-    return srv;
+    return normalizeServer(inviteServer ?? DEFAULT_SERVER);
   }
 
   function create(place: RoomPlace, settings: Partial<RoomSettings>) {
     attempt(async (n) => {
-      if (place === 'online') return createRoom(onlineServer(), n, settings);
+      if (place === 'online') return createRoom(DEFAULT_SERVER, n, settings);
       const base = await startLanHost();
       try {
         const session = await createRoom(base, n, settings);
@@ -160,7 +152,10 @@ export default function App() {
           resumeCode={saved ? saved.code : null}
           onResume={() => saved && go({ name: 'room', session: saved })}
           onCreate={() => go({ name: 'create' })}
-          onJoin={() => go({ name: 'join' })}
+          onJoin={() => {
+            setInviteServer(null);
+            go({ name: 'join' });
+          }}
           onLocal={() => go({ name: 'localSetup' })}
           onInfo={() => go({ name: 'info' })}
         />
@@ -196,8 +191,6 @@ export default function App() {
         <CreateRoomScreen
           busy={busy}
           error={error}
-          server={server}
-          onServer={updateServer}
           onBack={() => go({ name: 'home' })}
           onCreate={create}
         />
@@ -217,8 +210,6 @@ export default function App() {
           busy={busy}
           progress={progress}
           error={error}
-          server={server}
-          onServer={updateServer}
           onBack={() => go({ name: 'home' })}
           onJoin={join}
         />

@@ -1,13 +1,10 @@
 /** Обращения к игровому серверу. */
 import type { RoomAction, RoomSettings, RoomView } from '../game/room';
 
-/**
- * Адрес сервера для игры через интернет по умолчанию (сервер на компьютере + туннель tuna).
- * Пусто — адрес вводится в приложении.
- */
-export const DEFAULT_SERVER = '';
+/** Игровой сервер для игры через интернет. Встроен в приложение, игрок его не вводит. */
+export const DEFAULT_SERVER = 'https://ubezhishe-poplavok.msk1.amvera.tech';
 
-/** Создание комнаты и вход ждут дольше обычного: туннель или сервер могут отвечать медленно. */
+/** Создание комнаты и вход ждут дольше обычного: сервер может отвечать медленно. */
 const WAKE_TIMEOUT_MS = 45_000;
 
 export interface Session {
@@ -57,7 +54,7 @@ async function request<T>(url: string, init: RequestInit & { timeoutMs?: number 
   } catch (e: any) {
     if (e instanceof ApiError) throw e;
     if (e?.name === 'AbortError') throw new ApiError('Сервер не ответил вовремя', 0);
-    throw new ApiError('Нет связи с сервером. Проверьте интернет и адрес сервера (на компьютере должны работать сервер и tuna).', 0);
+    throw new ApiError('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.', 0);
   } finally {
     clearTimeout(timer);
   }

@@ -54,7 +54,7 @@ export function inviteMessage(opts: { code: string; server?: string; lan: boolea
     );
   }
   const link = inviteLink(opts.server || '', opts.code);
-  return `Заходи в «Убежище»! Комната ${opts.code}: ${link}`;
+  return `Заходи в «Убежище»! Комната ${opts.code}: ${link}\nИли в приложении: «Войти по коду» → ${opts.code}`;
 }
 
 function escapeHtml(s: string): string {
@@ -73,7 +73,7 @@ export function invitePage(code: string, exists: boolean): string {
   <a id="open" class="btn" href="#">Открыть в приложении</a>
   <p class="small">Нет приложения? <a href="${DOWNLOAD_URL}">Скачать «Убежище» для Android</a>,
   установить и снова открыть эту ссылку.</p>
-  <p class="small">Или вручную: «Войти по коду» → <b>${c}</b>, адрес сервера: <b id="host"></b></p>`
+  <p class="small">Или в приложении: «Войти по коду» → <b>${c}</b></p>`
     : `<p>Комнаты ${c} уже нет: партия закончилась или сервер перезапускали.</p>
   <p class="small">Попросите ведущего прислать новое приглашение.</p>`;
   return `<!doctype html>
@@ -96,7 +96,6 @@ a{color:#2c4677}
 <script>
 (function(){
   var server = location.origin, code = ${JSON.stringify(code)};
-  var h = document.getElementById('host'); if (h) h.textContent = location.host;
   var a = document.getElementById('open'); if (!a) return;
   var q = 'join?server=' + encodeURIComponent(server) + '&code=' + code;
   var android = /Android/i.test(navigator.userAgent);
