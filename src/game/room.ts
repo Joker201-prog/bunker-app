@@ -15,6 +15,7 @@ export interface RoomSettings {
   /** Ведущий тоже получает карты и голосует. */
   hostPlays: boolean;
   discussionSeconds: number;
+  votingSeconds: number;
 }
 
 export interface Member {
@@ -56,7 +57,7 @@ export type RoomResult = { ok: true; room: Room } | { ok: false; error: string }
 export const ONLINE_MS = 15_000;
 const NAME_MAX = 16;
 
-export const DEFAULT_SETTINGS: RoomSettings = { hostMode: 'creator', hostPlays: true, discussionSeconds: 60 };
+export const DEFAULT_SETTINGS: RoomSettings = { hostMode: 'creator', hostPlays: true, discussionSeconds: 60, votingSeconds: 30 };
 
 export function cleanName(raw: unknown): string {
   return String(raw ?? '')
@@ -80,6 +81,9 @@ function sanitizeSettings(base: RoomSettings, patch: Partial<RoomSettings>): Roo
   if (typeof patch.hostPlays === 'boolean') next.hostPlays = patch.hostPlays;
   if (typeof patch.discussionSeconds === 'number') {
     next.discussionSeconds = Math.max(30, Math.min(300, Math.round(patch.discussionSeconds)));
+  }
+  if (typeof patch.votingSeconds === 'number') {
+    next.votingSeconds = Math.max(15, Math.min(120, Math.round(patch.votingSeconds)));
   }
   return next;
 }
@@ -209,7 +213,11 @@ export function applyRoomAction(room: Room, actorId: string, a: RoomAction, now:
         return fail(`Нужно хотя бы ${MIN_PLAYERS} игрока${room.settings.hostPlays ? '' : ' (не считая ведущего)'}. Добавьте ботов или позовите друзей.`);
       }
       if (players.length > MAX_PLAYERS) return fail(`Игроков не больше ${MAX_PLAYERS}`);
-      const game = createGame(players, { hostId, discussionSeconds: room.settings.discussionSeconds });
+      const game = createGame(
+        players,
+        { hostId, discussionSeconds: room.settings.discussionSeconds, votingSeconds: room.settings.votingSeconds },
+        now,
+      );
       return { ok: true, room: bump({ ...room, hostId, game }, now) };
     }
     case 'transferHost': {

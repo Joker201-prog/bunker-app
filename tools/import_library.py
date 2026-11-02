@@ -27,6 +27,34 @@ SECTION_KIND = {
     'ОСОБЫЕ УСЛОВИЯ': 'special',
 }
 
+# Типы событий в библиотеке подписаны по-разному — для фильтров сводим их в группы.
+EVENT_GROUPS = {
+    'Стихия и климат': ['климат и стихия', 'природная'],
+    'Экология': ['экологический коллапс', 'экологическая катастрофа', 'экология', 'вымирание растений',
+                 'гмо-катастрофа', 'мутировавшие насекомые'],
+    'Эпидемии': ['вирусная пандемия', 'грибковое заражение', 'прионная эпидемия', 'бесплодие человечества',
+                 'паразитарная инфекция', 'зомби-подобное заражение'],
+    'Космос': ['космос', 'космическая', 'космическая аномалия', 'пришельцы'],
+    'Техника и ИИ': ['техногенная', 'нанотехнологии', 'сбой спутников', 'бунт роботов', 'коллапс интернета',
+                     'кибератака', 'ии и управление', 'отказ реакторов', 'промышленная авария', 'лаборатория'],
+    'Война': ['ядерная война', 'радиационный терроризм', 'ограниченный ядерный конфликт', 'химическая война',
+              'биологическое оружие', 'мировая гражданская война'],
+    'Общество и власть': ['социальная', 'захват власти корпорациями', 'религиозный культ', 'голод', 'диктатура'],
+    'Аномалии': ['портал', 'аномальное явление'],
+}
+
+
+def event_group(kind, event_id):
+    k = kind.strip().lower()
+    # Пандемии в старой части библиотеки подписаны как «природная»
+    if 'pandemic' in event_id or 'plague' in event_id or 'virus' in event_id:
+        return 'Эпидемии'
+    for group, kinds in EVENT_GROUPS.items():
+        if k in kinds:
+            return group
+    raise SystemExit(f'Нет группы для типа события «{kind}» ({event_id}) — добавьте его в EVENT_GROUPS')
+
+
 # Особые условия, которые приложение выполняет само. Остальные исполняет ведущий по тексту карты.
 EFFECTS = {'Дополнительный голос': 'doubleVote'}
 
@@ -115,6 +143,7 @@ def main():
                     'id': e['id'],
                     'title': e['title'],
                     'kind': e['params'].split(',')[0].strip(),
+                    'group': event_group(e['params'].split(',')[0], e['id']),
                     'difficulty': int(re.search(r'сложность (\d)/3', e['params']).group(1)),
                     'text': story,
                     'population': field(d, 'Население на момент игры:', stops),
@@ -168,6 +197,9 @@ def main():
         f'export const SPECIALS: Card[] = {js(cards["special"])};',
         f'export const CATASTROPHES: Catastrophe[] = {js(events)};',
         '',
+        '/** Группы событий для фильтров, в порядке показа. */',
+        f'export const EVENT_GROUP_ORDER: string[] = {js(list(EVENT_GROUPS.keys()))};',
+        '',
         '/** Полное описание карты по id — для экрана подробностей. */',
         f'export const CARD_TEXT: Record<string, string> = {js(text)};',
         '',
@@ -175,6 +207,10 @@ def main():
     open(OUT, 'w', encoding='utf8').write('\n'.join(out))
     counts = {k: len(v) for k, v in cards.items() if k != 'biology'}
     counts['biology'] = f"{len(bio['m'])} м + {len(bio['f'])} ж"
+    groups = {}
+    for ev in events:
+        groups[ev['group']] = groups.get(ev['group'], 0) + 1
+    print('Группы событий:', groups)
     print('Карты:', counts, '| события:', len(events), '| файл:', os.path.getsize(OUT) // 1024, 'КБ')
 
 

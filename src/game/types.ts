@@ -46,8 +46,10 @@ export interface Card {
 export interface Catastrophe {
   id: string;
   title: string;
-  /** Тип события: природная, техногенная… */
+  /** Тип события, как в библиотеке: «Климат и стихия», «техногенная»… */
   kind: string;
+  /** Группа для фильтров: «Стихия и климат», «Эпидемии», «Космос»… */
+  group: string;
   difficulty: number;
   /** Что случилось. */
   text: string;
@@ -114,13 +116,32 @@ export interface FinalReport {
   missing: Tag[];
 }
 
+/** Запись журнала: кто какую карту открыл и в каком раунде. */
+export interface RevealEntry {
+  round: number;
+  playerId: string;
+  kind: CardKind;
+  /** Раскрыта автоматически (игрок не успел или ведущий пропустил ход). */
+  auto?: boolean;
+}
+
 export interface GameState {
+  /** Уникальный id партии (для личных заметок на телефоне). */
+  id: string;
   /** Кто управляет переходами между этапами. null — партия без ведущего. */
   hostId: string | null;
-  /** Длительность обсуждения в секундах. */
+  /** Длительность обсуждения и голосования в секундах. */
   discussionSeconds: number;
-  /** Момент (мс, Date.now), когда обсуждение закончится само. */
+  votingSeconds: number;
+  /** Когда обсуждение / голосование закончится само. null — ведущий ещё не запустил таймер. */
   discussionEndsAt: number | null;
+  votingEndsAt: number | null;
+  /** Очередь раскрытия карт в текущем раунде и чей сейчас ход. */
+  turnOrder: string[];
+  turnIndex: number;
+  /** Когда следующий бот раскроет карту. */
+  nextBotRevealAt: number | null;
+  revealLog: RevealEntry[];
   /** Когда очередной бот скажет реплику. */
   nextBotChatAt: number | null;
   players: Player[];

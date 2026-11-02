@@ -29,14 +29,34 @@ for (let seed = 1; seed <= 3000; seed++) {
 
     for (let guard = 0; guard < 200 && s.stage !== 'final'; guard++) {
       if (s.stage === 'table') {
+        // Боты раскрывают по очереди, пока не дойдёт ход до человека
+        let now = Date.now() + 1e9 + guard * 1e6;
+        for (let k = 0; k < 40 && E.currentTurn(s) && E.currentTurn(s) !== 'human'; k++) {
+          now += 1000;
+          s = E.botTurn(s, now);
+        }
         const human = s.players.find((p) => p.isHuman);
-        if (human.alive) {
+        if (human.alive && E.currentTurn(s) === 'human') {
           const kinds = E.revealableKinds(s, human);
           if (kinds.length === 0) fail(`seed ${seed}: нечего раскрывать в раунде ${s.round}`);
-          else s = E.revealCard(s, 'human', kinds[0]);
+          else {
+            const other = s.turnOrder.find((id) => id !== 'human' && !s.revealedThisRound[id]);
+            if (other && E.revealCard(s, other, 'profession') !== s) fail(`seed ${seed}: раскрыли карту не в свой ход`);
+            s = E.revealCard(s, 'human', kinds[0]);
+          }
         }
         if (!E.canLeaveTable(s)) fail(`seed ${seed}: нельзя выйти из-за стола`);
+        const round = s.round;
+        const order = s.turnOrder.slice();
         s = E.startDiscussion(s);
+        // Журнал: каждый живой игрок раскрыл ровно одну карту, в порядке очереди
+        const log = s.revealLog.filter((r) => r.round === round).map((r) => r.playerId);
+        if (log.join() !== order.join()) fail(`seed ${seed}: порядок раскрытия ${log} ≠ очередь ${order}`);
+        if (new Set(log).size !== log.length) fail(`seed ${seed}: кто-то раскрыл две карты за раунд`);
+        if (round > 1 && order.length > 1) {
+          const prevFirst = s.revealLog.find((r) => r.round === round - 1)?.playerId;
+          if (prevFirst === order[0]) fail(`seed ${seed}: первый ход не сместился в раунде ${round}`);
+        }
       } else if (s.stage === 'discussion') {
         for (let i = 0; i < 12; i++) s = E.botMessage(s);
         // Реплики текущего обсуждения не повторяются и не содержат «Вы пока»

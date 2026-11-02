@@ -31,24 +31,46 @@ function playThrough(room, label) {
       // Не-ведущий не может двигать этапы
       const nonHost = room.members.find((m) => !m.isBot && m.id !== host);
       if (nonHost) bad(R.applyRoomAction(room, nonHost.id, { type: 'advance' }, t()), `${label}: не-ведущий advance`);
-      for (const p of g.players.filter((p) => p.isHuman && p.alive)) {
-        const kinds = E.revealableKinds(room.game, room.game.players.find((x) => x.id === p.id));
-        // Каждый второй человек «забывает» раскрыть карту — сработает авто-раскрытие
-        if (kinds.length && p.id.charCodeAt(1) % 2 === 0) room = ok(R.applyRoomAction(room, p.id, { type: 'reveal', kind: kinds[kinds.length - 1] }, t()), `${label}: reveal`);
+      // Раскрытие по очереди: боты ходят по таймеру, люди — сами или ведущий пропускает ход
+      for (let k = 0; k < 80; k++) {
+        const turn = E.currentTurn(room.game);
+        if (!turn) break;
+        const p = room.game.players.find((x) => x.id === turn);
+        if (!p.isHuman) { now += 1000; room = R.tickRoom(room, now); continue; }
+        const other = room.game.players.find((x) => x.isHuman && x.alive && x.id !== turn && !room.game.revealedThisRound[x.id]);
+        if (other) bad(R.applyRoomAction(room, other.id, { type: 'reveal', kind: 'profession' }, t()), `${label}: раскрытие не в свой ход`);
+        const kinds = E.revealableKinds(room.game, p);
+        if (p.id.charCodeAt(1) % 2 === 0) room = ok(R.applyRoomAction(room, p.id, { type: 'reveal', kind: kinds[kinds.length - 1] }, t()), `${label}: reveal`);
+        else room = ok(R.applyRoomAction(room, host, { type: 'skipTurn' }, t()), `${label}: skipTurn`);
       }
+      check(E.currentTurn(room.game) === null, `${label}: очередь не закончилась`);
       room = ok(R.applyRoomAction(room, host, { type: 'advance' }, t()), `${label}: advance table`);
       check(room.game.stage === 'discussion', `${label}: после стола не обсуждение`);
-      check(E.pendingReveals({ ...room.game, stage: 'table' }).length === 0, `${label}: кто-то остался без раскрытой карты`);
+      check(room.game.discussionEndsAt === null, `${label}: таймер обсуждения запустился сам`);
     } else if (g.stage === 'discussion') {
       const speaker = g.players.find((p) => p.isHuman && p.alive);
       if (speaker) room = ok(R.applyRoomAction(room, speaker.id, { type: 'chat', text: 'Я полезен' }, t()), `${label}: chat`);
       const dead = g.players.find((p) => p.isHuman && !p.alive && p.id !== host);
       if (dead) bad(R.applyRoomAction(room, dead.id, { type: 'chat', text: 'эй' }, t()), `${label}: выбывший пишет в чат`);
+      bad(R.applyRoomAction(room, host, { type: 'extend', seconds: 30 }, t()), `${label}: продление до запуска таймера`);
+      const nh = room.members.find((m) => !m.isBot && m.id !== host);
+      if (nh) bad(R.applyRoomAction(room, nh.id, { type: 'startTimer' }, t()), `${label}: не-ведущий запустил таймер`);
+      room = ok(R.applyRoomAction(room, host, { type: 'startTimer' }, now), `${label}: startTimer`);
+      const end0 = room.game.discussionEndsAt;
+      room = ok(R.applyRoomAction(room, host, { type: 'extend', seconds: 30 }, now), `${label}: extend`);
+      check(room.game.discussionEndsAt === end0 + 30000, `${label}: продление не добавило 30 с`);
       // Время идёт: боты говорят, затем таймер сам переводит в голосование
       for (let i = 0; i < 5; i++) { now += 4000; room = R.tickRoom(room, now); }
       now = room.game.discussionEndsAt + 1;
       room = R.tickRoom(room, now);
       check(room.game.stage === 'voting' || room.game.stage === 'result', `${label}: таймер не завершил обсуждение (${room.game.stage})`);
+      check(!room.game.votingEndsAt, `${label}: таймер голосования запустился сам`);
+    } else if (g.stage === 'voting' && g.round % 2 === 0) {
+      room = ok(R.applyRoomAction(room, host, { type: 'startTimer' }, now), `${label}: таймер голосования`);
+      room = ok(R.applyRoomAction(room, host, { type: 'extend', seconds: 15 }, now), `${label}: продление голосования`);
+      now = room.game.votingEndsAt + 1;
+      room = R.tickRoom(room, now);
+      check(room.game.stage === 'result', `${label}: таймер голосования не подсчитал голоса`);
     } else if (g.stage === 'voting') {
       const humansAlive = g.players.filter((p) => p.isHuman && p.alive && room.members.some((m) => m.id === p.id));
       for (const p of humansAlive) {

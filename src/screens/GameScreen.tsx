@@ -16,16 +16,19 @@ import { Dossier } from '../components/Dossier';
 import { EventSheet } from '../components/EventSheet';
 import { GameHeader } from '../components/StageBar';
 import type { Action } from '../game/actions';
+import { KIND_LABEL } from '../data/cards';
 import {
   alivePlayers,
   canLeaveTable,
+  currentTurn,
   eliminationsThisRound,
   isLastRound,
   pendingReveals,
   playerById,
   revealableKinds,
 } from '../game/engine';
-import type { GameState } from '../game/types';
+import type { GameState, Player } from '../game/types';
+import { useNotes } from '../hooks/useNotes';
 import { colors, fonts, spacing } from '../theme';
 import { FinalScreen } from './FinalScreen';
 
@@ -86,6 +89,22 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
   const me = game.players.find((p) => p.id === viewerId) ?? null;
   const isHost = game.hostId === viewerId;
   const numberOf = (id: string) => game.players.findIndex((p) => p.id === id) + 1;
+  const { notes, setNote } = useNotes(game.id);
+  const turn = currentTurn(game);
+
+  /** Досье с общими для всех этапов вещами: номер, журнал раскрытий, чей ход, личная заметка. */
+  const dossier: DossierFn = (p, extra = {}) => (
+    <Dossier
+      key={p.id}
+      player={p}
+      number={numberOf(p.id)}
+      revealLog={game.revealLog}
+      isTurn={game.stage === 'table' && turn === p.id}
+      note={p.id !== viewerId ? notes[p.id] : undefined}
+      onNote={p.id !== viewerId ? (text) => setNote(p.id, text) : undefined}
+      {...extra}
+    />
+  );
 
   function confirmExit() {
     Alert.alert('Выйти из партии?', exitWarning, [
@@ -178,7 +197,8 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
             viewerId={viewerId}
             isHost={isHost}
             online={!!online}
-            numberOf={numberOf}
+            dossier={dossier}
+            onSkip={() => run({ type: 'skipTurn' })}
             onReveal={(kind) => run({ type: 'reveal', kind })}
             onContinue={() => {
               const waiting = pendingReveals(game);
@@ -196,12 +216,15 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
 
         {game.stage === 'discussion' && (
           <View>
-            <View style={styles.timerRow}>
-              <WoodHeading style={styles.noMargin}>Обсуждение</WoodHeading>
-              {secondsLeft !== null && (
-                <Text style={[styles.timer, secondsLeft <= 10 && styles.timerLow]}>{clock(secondsLeft)}</Text>
-              )}
-            </View>
+            <TimerControl
+              title="Обсуждение"
+              seconds={secondsLeft}
+              defaultSeconds={game.discussionSeconds}
+              extendBy={30}
+              isHost={isHost}
+              onStart={() => run({ type: 'startTimer' })}
+              onExtend={(sec) => run({ type: 'extend', seconds: sec })}
+            />
 
             <Paper rotate="-0.4deg" padded={false}>
               <ScrollView
@@ -256,37 +279,33 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
             )}
 
             {isHost ? (
-              <View style={styles.hostRow}>
-                <DeskButton
-                  label={elims > 0 ? 'Голосовать' : 'Завершить раунд'}
-                  variant="secondary"
-                  onPress={() => run({ type: 'advance' })}
-                  style={styles.flex}
-                />
-                <DeskButton
-                  label="+30 с"
-                  variant="secondary"
-                  onPress={() => run({ type: 'extend', seconds: 30 })}
-                  style={styles.extend}
-                />
-              </View>
+              <DeskButton
+                label={elims > 0 ? 'Перейти к голосованию' : 'Завершить раунд'}
+                variant="secondary"
+                onPress={() => run({ type: 'advance' })}
+                style={styles.block}
+              />
             ) : (
               <Text style={styles.woodNote}>Голосование откроет ведущий или таймер.</Text>
             )}
 
             <WoodHeading>Досье</WoodHeading>
-            {game.players.map((p) => (
-              <Dossier
-                key={p.id}
-                player={p}
-                number={numberOf(p.id)}
-                showAll={p.id === viewerId}
-                secretHint={p.id === viewerId}
-              />
-            ))}
+            {game.players.map((p) => dossier(p, { showAll: p.id === viewerId, secretHint: p.id === viewerId }))}
           </View>
         )}
 
+        {game.stage === 'voting' && (
+          <TimerControl
+            title="Кого не пускаем?"
+            seconds={secondsLeft}
+            defaultSeconds={game.votingSeconds}
+            extendBy={15}
+            isHost={isHost}
+            onStart={() => run({ type: 'startTimer' })}
+            onExtend={(sec) => run({ type: 'extend', seconds: sec })}
+            idleNote="Голоса подсчитает ведущий или таймер, если ведущий его запустит."
+          />
+        )}
         {game.stage === 'voting' && (
           <VotingStage
             game={game}
@@ -296,7 +315,7 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
             elims={elims}
             selected={selected}
             onSelect={setSelected}
-            numberOf={numberOf}
+            dossier={dossier}
             onVote={(target) => run({ type: 'vote', target })}
             onCount={(pending) => {
               if (pending > 0) {
@@ -315,7 +334,7 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
           <ResultStage
             game={game}
             isHost={isHost}
-            numberOf={numberOf}
+            dossier={dossier}
             last={isLastRound(game)}
             onNext={() => run({ type: 'advance' })}
           />
@@ -330,7 +349,8 @@ function TableStage({
   viewerId,
   isHost,
   online,
-  numberOf,
+  dossier,
+  onSkip,
   onReveal,
   onContinue,
 }: {
@@ -338,22 +358,27 @@ function TableStage({
   viewerId: string;
   isHost: boolean;
   online: boolean;
-  numberOf: (id: string) => number;
+  dossier: DossierFn;
+  onSkip: () => void;
   onReveal: (kind: any) => void;
   onContinue: () => void;
 }) {
   const me = game.players.find((p) => p.id === viewerId) ?? null;
-  const revealable = me && me.alive ? revealableKinds(game, me) : [];
+  const turn = currentTurn(game);
+  const turnPlayer = turn ? playerById(game, turn) : null;
+  const myTurn = !!me && turn === me.id;
+  const revealable = me && me.alive && myTurn ? revealableKinds(game, me) : [];
   const done = canLeaveTable(game, viewerId);
   const humansAlive = alivePlayers(game).filter((p) => p.isHuman);
   const waiting = pendingReveals(game);
+  const log = game.revealLog.filter((r) => r.round === game.round);
 
   let hint: string;
-  if (!me) hint = 'Вы ведущий и не играете. Начните обсуждение, когда все раскроют карты.';
+  if (!me) hint = 'Вы ведущий и не играете. Игроки раскрывают карты по очереди.';
   else if (!me.alive) hint = 'Вы за дверью и наблюдаете за игрой.';
-  else if (done) hint = isHost ? 'Карта открыта.' : 'Карта открыта. Ждём, пока ведущий начнёт обсуждение.';
-  else if (game.round === 1) hint = 'Первый раунд: нажмите «Раскрыть» у профессии.';
-  else hint = 'Нажмите «Раскрыть» у одной карты — её увидят все.';
+  else if (done) hint = isHost ? 'Ваша карта открыта.' : 'Ваша карта открыта. Ждём, пока ведущий начнёт обсуждение.';
+  else if (myTurn) hint = game.round === 1 ? 'Ваш ход: нажмите «Раскрыть» у профессии.' : 'Ваш ход: нажмите «Раскрыть» у одной карты — её увидят все.';
+  else hint = 'Карты раскрывают по очереди. Ваш ход скоро.';
 
   const others = game.players.filter((p) => p.id !== viewerId);
   // В одиночной игре ведущий — сам игрок: сначала он раскрывает карту.
@@ -361,12 +386,33 @@ function TableStage({
 
   return (
     <View>
+      <Paper rotate="-0.5deg" style={styles.logPaper}>
+        <Text style={styles.logTitle}>Раунд {game.round}: кто что открыл</Text>
+        {log.length === 0 && <Text style={styles.logEmpty}>Пока никто не раскрыл карту.</Text>}
+        {log.map((r, i) => {
+          const p = playerById(game, r.playerId);
+          return (
+            <Text key={r.playerId + r.kind} style={styles.logLine}>
+              {i + 1}. <Text style={styles.logName}>{p.name}</Text> — {KIND_LABEL[r.kind]}: {p.cards[r.kind].title}
+              {r.auto ? <Text style={styles.logAuto}> (автоматически)</Text> : null}
+            </Text>
+          );
+        })}
+        {turnPlayer ? (
+          <Text style={styles.logTurn}>
+            Сейчас ход: {turnPlayer.id === viewerId ? 'ваш' : turnPlayer.name}
+          </Text>
+        ) : (
+          <Text style={styles.logTurn}>Все раскрыли карты.</Text>
+        )}
+      </Paper>
+
       <Text style={styles.woodText}>{hint}</Text>
       {game.round === 1 && <Text style={styles.woodNote}>Нажмите на открытую карту, чтобы прочитать её полное описание.</Text>}
       {me && (
         <>
           <WoodHeading>Ваше досье</WoodHeading>
-          <Dossier player={me} number={numberOf(me.id)} showAll secretHint revealable={revealable} onReveal={onReveal} />
+          {dossier(me, { showAll: true, secretHint: true, revealable, onReveal })}
         </>
       )}
       {isHost && (
@@ -376,13 +422,14 @@ function TableStage({
               Раскрыли карту: {humansAlive.length - waiting.length} из {humansAlive.length}
             </Text>
           )}
+          {online && turnPlayer && turnPlayer.isHuman && turnPlayer.id !== viewerId && (
+            <DeskButton label={`Пропустить ход: ${turnPlayer.name}`} variant="secondary" onPress={onSkip} style={styles.block} />
+          )}
           <DeskButton label="Начать обсуждение" onPress={onContinue} disabled={!hostCanGo} style={styles.block} />
         </>
       )}
       <WoodHeading>{me ? 'Остальные' : 'Игроки'}</WoodHeading>
-      {others.map((p) => (
-        <Dossier key={p.id} player={p} number={numberOf(p.id)} />
-      ))}
+      {others.map((p) => dossier(p))}
     </View>
   );
 }
@@ -395,7 +442,7 @@ function VotingStage({
   elims,
   selected,
   onSelect,
-  numberOf,
+  dossier,
   onVote,
   onCount,
 }: {
@@ -406,7 +453,7 @@ function VotingStage({
   elims: number;
   selected: string | null;
   onSelect: (id: string) => void;
-  numberOf: (id: string) => number;
+  dossier: DossierFn;
   onVote: (target: string) => void;
   onCount: (pending: number) => void;
 }) {
@@ -425,7 +472,6 @@ function VotingStage({
 
   return (
     <View>
-      <WoodHeading>Кого не пускаем?</WoodHeading>
       <Text style={styles.woodText}>{hint}</Text>
       {online && (
         <Text style={styles.woodNote}>
@@ -435,15 +481,7 @@ function VotingStage({
       )}
       {alivePlayers(game)
         .filter((p) => p.id !== viewerId)
-        .map((p) => (
-          <Dossier
-            key={p.id}
-            player={p}
-            number={numberOf(p.id)}
-            marked={marked === p.id}
-            onPress={canVote ? () => onSelect(p.id) : undefined}
-          />
-        ))}
+        .map((p) => dossier(p, { marked: marked === p.id, onPress: canVote ? () => onSelect(p.id) : undefined }))}
       {canVote && (
         <DeskButton
           label={myVote ? 'Изменить голос' : 'Проголосовать'}
@@ -459,6 +497,52 @@ function VotingStage({
   );
 }
 
+type DossierFn = (p: Player, extra?: Partial<React.ComponentProps<typeof Dossier>>) => React.ReactElement;
+
+/** Таймер этапа: показывает остаток, ведущему — кнопки запуска и продления. */
+function TimerControl({
+  title,
+  seconds,
+  defaultSeconds,
+  extendBy,
+  isHost,
+  onStart,
+  onExtend,
+  idleNote,
+}: {
+  title: string;
+  seconds: number | null;
+  defaultSeconds: number;
+  extendBy: number;
+  isHost: boolean;
+  onStart: () => void;
+  onExtend: (seconds: number) => void;
+  idleNote?: string;
+}) {
+  return (
+    <View>
+      <View style={styles.timerRow}>
+        <WoodHeading style={[styles.noMargin, styles.flex]}>{title}</WoodHeading>
+        <Text
+          style={[styles.timer, seconds === null && styles.timerIdle, seconds !== null && seconds <= 10 && styles.timerLow]}
+          accessibilityLabel={seconds === null ? 'Таймер не запущен' : `Осталось ${seconds} секунд`}
+        >
+          {seconds === null ? '—:—' : clock(seconds)}
+        </Text>
+      </View>
+      {isHost ? (
+        seconds === null ? (
+          <DeskButton label={`Запустить таймер · ${defaultSeconds} с`} variant="secondary" onPress={onStart} style={styles.timerBtn} />
+        ) : (
+          <DeskButton label={`Добавить ${extendBy} с`} variant="secondary" onPress={() => onExtend(extendBy)} style={styles.timerBtn} />
+        )
+      ) : seconds === null ? (
+        <Text style={styles.woodNote}>{idleNote ?? 'Таймер запустит ведущий.'}</Text>
+      ) : null}
+    </View>
+  );
+}
+
 /** Палочки для подсчёта голосов группами по пять: «||||| ||». */
 function tallyMarks(n: number): string {
   const groups: string[] = [];
@@ -469,13 +553,13 @@ function tallyMarks(n: number): string {
 function ResultStage({
   game,
   isHost,
-  numberOf,
+  dossier,
   last,
   onNext,
 }: {
   game: GameState;
   isHost: boolean;
-  numberOf: (id: string) => number;
+  dossier: DossierFn;
   last: boolean;
   onNext: () => void;
 }) {
@@ -514,9 +598,7 @@ function ResultStage({
         </Paper>
       )}
 
-      {leaving.map((p) => (
-        <Dossier key={p.id} player={p} number={numberOf(p.id)} showAll />
-      ))}
+      {leaving.map((p) => dossier(p, { showAll: true }))}
 
       {isHost ? (
         <DeskButton label={last ? 'Узнать судьбу бункера' : 'Следующий раунд'} onPress={onNext} style={styles.block} />
@@ -544,8 +626,6 @@ const styles = StyleSheet.create({
   woodNote: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.onWoodMuted, marginTop: spacing.md },
   block: { marginTop: spacing.md, marginBottom: spacing.md },
   gapTop: { marginTop: spacing.md },
-  hostRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  extend: { width: 96 },
 
   timerRow: {
     flexDirection: 'row',
@@ -556,6 +636,15 @@ const styles = StyleSheet.create({
   },
   timer: { fontFamily: fonts.display, fontSize: 28, color: colors.onWood, letterSpacing: 1 },
   timerLow: { color: '#ff8a7a' },
+  timerIdle: { color: colors.onWoodMuted },
+  timerBtn: { marginBottom: spacing.md },
+  logPaper: { marginTop: spacing.lg },
+  logTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.inkSoft, marginBottom: spacing.xs },
+  logEmpty: { fontFamily: fonts.type, fontSize: 14, color: colors.inkSoft },
+  logLine: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.ink, marginBottom: 2 },
+  logName: { fontFamily: fonts.bold },
+  logAuto: { color: colors.inkSoft },
+  logTurn: { fontFamily: fonts.bold, fontSize: 14, color: colors.stampBlue, marginTop: spacing.sm },
   chat: { height: 280 },
   chatContent: { padding: spacing.lg, gap: spacing.sm },
   systemMsg: { fontFamily: fonts.type, fontSize: 13, color: colors.inkSoft, textAlign: 'center' },

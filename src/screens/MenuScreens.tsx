@@ -53,6 +53,7 @@ export function HomeScreen({
   onCreate,
   onJoin,
   onLocal,
+  onInfo,
 }: {
   name: string;
   onName: (v: string) => void;
@@ -61,6 +62,7 @@ export function HomeScreen({
   onCreate: () => void;
   onJoin: () => void;
   onLocal: () => void;
+  onInfo: () => void;
 }) {
   return (
     <MenuLayout>
@@ -86,6 +88,7 @@ export function HomeScreen({
       <DeskButton label="Создать комнату" onPress={onCreate} style={styles.btn} />
       <DeskButton label="Войти по коду" onPress={onJoin} style={styles.btn} />
       <DeskButton label="Игра с ботами" variant="secondary" onPress={onLocal} style={styles.btn} />
+      <DeskButton label="Информация" variant="secondary" onPress={onInfo} style={styles.btn} />
     </MenuLayout>
   );
 }
@@ -176,6 +179,7 @@ export function CreateRoomScreen({
   const [hostMode, setHostMode] = useState<HostMode>('creator');
   const [hostPlays, setHostPlays] = useState(true);
   const [seconds, setSeconds] = useState(60);
+  const [voteSeconds, setVoteSeconds] = useState(30);
   const needServer = place === 'online' && !server.trim();
   return (
     <MenuLayout onBack={onBack}>
@@ -233,13 +237,29 @@ export function CreateRoomScreen({
             </Pressable>
           ))}
         </View>
+
+        <Text style={[styles.label, styles.gapTop]}>Время на голосование:</Text>
+        <View style={styles.row}>
+          {[30, 45, 60].map((v) => (
+            <Pressable
+              key={v}
+              onPress={() => setVoteSeconds(v)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: voteSeconds === v }}
+              style={[styles.pill, voteSeconds === v && styles.pillOn]}
+            >
+              <Text style={[styles.pillText, voteSeconds === v && styles.pillTextOn]}>{v} с</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.hint}>Таймеры запускает и продлевает ведущий.</Text>
       </Paper>
 
       <ErrorLine text={error} />
       <DeskButton
         label={busy ? 'Создаём…' : 'Создать комнату'}
         disabled={busy || needServer}
-        onPress={() => onCreate(place, { hostMode, hostPlays, discussionSeconds: seconds })}
+        onPress={() => onCreate(place, { hostMode, hostPlays, discussionSeconds: seconds, votingSeconds: voteSeconds })}
         style={styles.btnBig}
       />
       {needServer && <Text style={styles.wake}>Укажите адрес сервера выше.</Text>}

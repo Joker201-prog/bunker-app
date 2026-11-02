@@ -8,11 +8,16 @@ import {
   addChat,
   allHumansVoted,
   botMessage,
+  botTurn,
   castVote,
+  currentTurn,
   nextRound,
+  playerById,
   resolveRound,
   revealCard,
+  skipTurn,
   startDiscussion,
+  startTimer,
   startVoting,
 } from './engine';
 import { rng } from './rng';
@@ -24,8 +29,12 @@ export type Action =
   | { type: 'vote'; target: string }
   /** Ведущий: перейти к следующему этапу (стол → обсуждение → голосование → итоги → следующий раунд). */
   | { type: 'advance' }
-  /** Ведущий: добавить время к обсуждению. */
-  | { type: 'extend'; seconds: number };
+  /** Ведущий: запустить таймер обсуждения или голосования. */
+  | { type: 'startTimer' }
+  /** Ведущий: добавить время к обсуждению или голосованию. */
+  | { type: 'extend'; seconds: number }
+  /** Ведущий: пропустить ход игрока за столом (ему откроется первая доступная карта). */
+  | { type: 'skipTurn' };
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: string };
 
@@ -42,6 +51,10 @@ export function applyAction(s: GameState, actorId: string, a: Action, now: numbe
       if (!me.alive) return fail('Вы выбыли');
       if (s.stage !== 'table') return fail('Карты раскрывают за столом');
       if (!KIND_ORDER.includes(a.kind)) return fail('Неизвестная карта');
+      const turn = currentTurn(s);
+      if (turn !== actorId) {
+        return fail(turn ? `Сейчас ход: ${playerById(s, turn).name}` : 'В этом раунде все уже раскрыли карты');
+      }
       const next = revealCard(s, actorId, a.kind);
       if (next === s) return fail('Эту карту сейчас раскрыть нельзя');
       return { ok: true, state: next };
@@ -67,11 +80,28 @@ export function applyAction(s: GameState, actorId: string, a: Action, now: numbe
       if (!isHost) return fail('Это делает ведущий');
       return { ok: true, state: advance(s, now) };
     }
+    case 'startTimer': {
+      if (!isHost) return fail('Таймер запускает ведущий');
+      const next = startTimer(s, now);
+      if (next === s) return fail(s.stage === 'discussion' || s.stage === 'voting' ? 'Таймер уже идёт' : 'Сейчас таймер не нужен');
+      return { ok: true, state: next };
+    }
     case 'extend': {
       if (!isHost) return fail('Это делает ведущий');
-      if (s.stage !== 'discussion' || !s.discussionEndsAt) return fail('Обсуждение не идёт');
       const add = Math.max(10, Math.min(MAX_EXTEND_SECONDS, Math.floor(a.seconds || 30)));
-      return { ok: true, state: { ...s, discussionEndsAt: s.discussionEndsAt + add * 1000 } };
+      if (s.stage === 'discussion' && s.discussionEndsAt) {
+        return { ok: true, state: { ...s, discussionEndsAt: Math.max(s.discussionEndsAt, now) + add * 1000 } };
+      }
+      if (s.stage === 'voting' && s.votingEndsAt) {
+        return { ok: true, state: { ...s, votingEndsAt: Math.max(s.votingEndsAt, now) + add * 1000 } };
+      }
+      return fail('Сначала запустите таймер');
+    }
+    case 'skipTurn': {
+      if (!isHost) return fail('Это делает ведущий');
+      const turn = currentTurn(s);
+      if (!turn) return fail('Все уже раскрыли карты');
+      return { ok: true, state: skipTurn(s) };
     }
   }
   return fail('Неизвестное действие');
@@ -87,7 +117,7 @@ export function advance(s: GameState, now: number = Date.now()): GameState {
     case 'voting':
       return resolveRound(s);
     case 'result':
-      return nextRound(s);
+      return nextRound(s, now);
     default:
       return s;
   }
@@ -98,6 +128,10 @@ export function advance(s: GameState, now: number = Date.now()): GameState {
  * Возвращает то же состояние, если ничего не изменилось.
  */
 export function tick(s: GameState, now: number = Date.now()): GameState {
+  if (s.stage === 'table') return botTurn(s, now);
+  if (s.stage === 'voting') {
+    return s.votingEndsAt !== null && now >= s.votingEndsAt ? resolveRound(s) : s;
+  }
   if (s.stage !== 'discussion') return s;
   if (s.discussionEndsAt !== null && now >= s.discussionEndsAt) return startVoting(s);
   if (s.nextBotChatAt !== null && now >= s.nextBotChatAt) {
@@ -107,10 +141,11 @@ export function tick(s: GameState, now: number = Date.now()): GameState {
   return s;
 }
 
-/** Секунды до конца обсуждения (для экрана). */
+/** Секунды до конца обсуждения или голосования; null — таймер не запущен. */
 export function secondsLeft(s: GameState, now: number = Date.now()): number | null {
-  if (s.stage !== 'discussion' || s.discussionEndsAt === null) return null;
-  return Math.max(0, Math.ceil((s.discussionEndsAt - now) / 1000));
+  const end = s.stage === 'discussion' ? s.discussionEndsAt : s.stage === 'voting' ? s.votingEndsAt : null;
+  if (end === null) return null;
+  return Math.max(0, Math.ceil((end - now) / 1000));
 }
 
 const HIDDEN_CARD = (kind: CardKind): Card => ({ kind, title: '', value: 0, tags: [] });

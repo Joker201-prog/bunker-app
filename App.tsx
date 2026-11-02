@@ -16,11 +16,13 @@ import { findLanRoom, startLanHost, stopLanHost } from './src/net/lan';
 import { loadSaved, saveSaved } from './src/net/storage';
 import { GameScreen } from './src/screens/GameScreen';
 import { CreateRoomScreen, HomeScreen, JoinScreen, LocalSetupScreen, type RoomPlace } from './src/screens/MenuScreens';
+import { InfoScreen } from './src/screens/InfoScreen';
 import { RoomScreen } from './src/screens/RoomScreen';
 import { colors, images } from './src/theme';
 
 type Screen =
   | { name: 'home' }
+  | { name: 'info' }
   | { name: 'localSetup' }
   | { name: 'local'; game: GameState; key: number; players: number }
   | { name: 'create' }
@@ -134,8 +136,12 @@ export default function App() {
           onCreate={() => go({ name: 'create' })}
           onJoin={() => go({ name: 'join' })}
           onLocal={() => go({ name: 'localSetup' })}
+          onInfo={() => go({ name: 'info' })}
         />
       );
+      break;
+    case 'info':
+      content = <InfoScreen onBack={() => go({ name: 'home' })} />;
       break;
     case 'localSetup':
       content = (

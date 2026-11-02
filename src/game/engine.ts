@@ -6,6 +6,7 @@ import {
   FACTS,
   HEALTH,
   HOBBIES,
+  KIND_LABEL,
   KIND_ORDER,
   PHOBIAS,
   PROFESSIONS,
@@ -85,6 +86,9 @@ export interface Participant {
 }
 
 export const DEFAULT_DISCUSSION_SECONDS = 60;
+export const DEFAULT_VOTING_SECONDS = 30;
+/** Пауза между раскрытиями карт ботами, мс. */
+export const BOT_REVEAL_GAP_MS = 900;
 
 /** Сколько аватаров каждого пола есть в приложении (assets/ui/avatar_m*.jpg, avatar_f*.jpg). */
 export const AVATARS_PER_SEX = 6;
@@ -92,7 +96,8 @@ export const AVATARS_PER_SEX = 6;
 /** Раздаёт карты участникам и создаёт партию. */
 export function createGame(
   participants: Participant[],
-  opts: { hostId?: string | null; discussionSeconds?: number } = {},
+  opts: { hostId?: string | null; discussionSeconds?: number; votingSeconds?: number } = {},
+  now: number = Date.now(),
 ): GameState {
   const count = participants.length;
   if (count < MIN_PLAYERS || count > MAX_PLAYERS) {
@@ -145,10 +150,17 @@ export function createGame(
   });
 
   const bunker: BunkerCard[] = shuffle(BUNKER_CARDS).slice(0, 3);
-  return {
+  const game: GameState = {
+    id: Math.floor(rng.next() * 36 ** 8).toString(36) + now.toString(36),
     hostId: opts.hostId ?? null,
     discussionSeconds: opts.discussionSeconds ?? DEFAULT_DISCUSSION_SECONDS,
+    votingSeconds: opts.votingSeconds ?? DEFAULT_VOTING_SECONDS,
     discussionEndsAt: null,
+    votingEndsAt: null,
+    turnOrder: [],
+    turnIndex: 0,
+    nextBotRevealAt: null,
+    revealLog: [],
     nextBotChatAt: null,
     players,
     seats,
@@ -165,6 +177,7 @@ export function createGame(
     results: [],
     final: null,
   };
+  return beginTable(game, now);
 }
 
 /** Свободные имена ботов, которых ещё нет среди занятых имён. */
@@ -215,6 +228,34 @@ export function addChat(s: GameState, authorId: string | null, text: string): Ga
   return withMessage(s, authorId, t.slice(0, 200));
 }
 
+/**
+ * Начало раунда за столом: очередь раскрытия. Каждый раунд очередь сдвигается,
+ * чтобы первым ходил разный игрок.
+ */
+function beginTable(s: GameState, now: number): GameState {
+  const alive = alivePlayers(s).map((p) => p.id);
+  const shift = alive.length ? (s.round - 1) % alive.length : 0;
+  const turnOrder = [...alive.slice(shift), ...alive.slice(0, shift)];
+  return skipFinished({ ...s, turnOrder, turnIndex: 0, nextBotRevealAt: now + BOT_REVEAL_GAP_MS });
+}
+
+/** Пропустить в очереди тех, кому нечего раскрывать или кто уже раскрыл. */
+function skipFinished(s: GameState): GameState {
+  let i = s.turnIndex;
+  while (i < s.turnOrder.length) {
+    const p = s.players.find((x) => x.id === s.turnOrder[i]);
+    if (p && p.alive && !s.revealedThisRound[p.id] && revealableKinds(s, p).length > 0) break;
+    i++;
+  }
+  return i === s.turnIndex ? s : { ...s, turnIndex: i };
+}
+
+/** Чей сейчас ход раскрывать карту; null — все раскрыли. */
+export function currentTurn(s: GameState): string | null {
+  if (s.stage !== 'table') return null;
+  return s.turnOrder[s.turnIndex] ?? null;
+}
+
 /** The kinds a player may reveal right now (round 1 forces profession). */
 export function revealableKinds(s: GameState, p: Player): CardKind[] {
   if (s.revealedThisRound[p.id]) return [];
@@ -222,36 +263,71 @@ export function revealableKinds(s: GameState, p: Player): CardKind[] {
   return KIND_ORDER.filter((k) => !p.revealed[k]);
 }
 
-export function revealCard(s: GameState, playerId: string, kind: CardKind): GameState {
+/** Раскрыть карту в свой ход. Возвращает то же состояние, если сейчас нельзя. */
+export function revealCard(s: GameState, playerId: string, kind: CardKind, auto = false): GameState {
   if (s.stage !== 'table') return s;
+  if (currentTurn(s) !== playerId) return s;
   const p = playerById(s, playerId);
   if (!p.alive || !revealableKinds(s, p).includes(kind)) return s;
-  const next = mapPlayer(s, playerId, (pl) => ({
+  let next = mapPlayer(s, playerId, (pl) => ({
     ...pl,
     revealed: { ...pl.revealed, [kind]: true },
   }));
-  return { ...next, revealedThisRound: { ...next.revealedThisRound, [playerId]: true } };
+  next = {
+    ...next,
+    revealedThisRound: { ...next.revealedThisRound, [playerId]: true },
+    revealLog: [...next.revealLog, { round: s.round, playerId, kind, ...(auto ? { auto: true } : {}) }],
+    turnIndex: next.turnIndex + 1,
+  };
+  next = withMessage(next, null, `${p.name} открывает: ${KIND_LABEL[kind]} — ${p.cards[kind].title}${auto ? ' (автоматически)' : ''}.`);
+  return skipFinished(next);
 }
 
 function cardAppeal(card: Card): number {
   return card.value + rng.next() * 1.5;
 }
 
-/** Every living bot that has not yet revealed a card this round reveals one. */
-export function botsReveal(s: GameState): GameState {
+/** Какую карту раскроет бот: обычно лучшую, иногда наугад (блефует). */
+function botChoice(s: GameState, p: Player): CardKind | null {
+  const kinds = revealableKinds(s, p);
+  if (!kinds.length) return null;
+  const sorted = kinds.slice().sort((a, b) => cardAppeal(p.cards[b]) - cardAppeal(p.cards[a]));
+  return chance(0.2) ? pick(kinds) : sorted[0];
+}
+
+/** Если сейчас ход бота и пауза прошла — бот раскрывает карту. */
+export function botTurn(s: GameState, now: number): GameState {
+  const id = currentTurn(s);
+  if (!id || (s.nextBotRevealAt !== null && now < s.nextBotRevealAt)) return s;
+  const p = playerById(s, id);
+  if (p.isHuman) return s;
+  const kind = botChoice(s, p);
+  const next = kind ? revealCard(s, id, kind) : skipFinished({ ...s, turnIndex: s.turnIndex + 1 });
+  return { ...next, nextBotRevealAt: now + BOT_REVEAL_GAP_MS };
+}
+
+/** Раскрыть оставшиеся карты по очереди: боты выбирают сами, людям открывается первая доступная. */
+function revealRemaining(s: GameState): GameState {
   let cur = s;
-  for (const p of alivePlayers(s)) {
-    if (p.isHuman || cur.revealedThisRound[p.id]) continue;
-    const kinds = revealableKinds(cur, playerById(cur, p.id));
-    if (kinds.length === 0) continue;
-    // Bots like to show good cards first, but sometimes bluff by showing bad ones.
-    const sorted = kinds
-      .slice()
-      .sort((a, b) => cardAppeal(playerById(cur, p.id).cards[b]) - cardAppeal(playerById(cur, p.id).cards[a]));
-    const kind = chance(0.2) ? pick(kinds) : sorted[0];
-    cur = revealCard(cur, p.id, kind);
+  for (let guard = 0; guard < 64; guard++) {
+    const id = currentTurn(cur);
+    if (!id) break;
+    const p = playerById(cur, id);
+    const kind = p.isHuman ? revealableKinds(cur, p)[0] : botChoice(cur, p);
+    const next = kind ? revealCard(cur, id, kind, p.isHuman) : skipFinished({ ...cur, turnIndex: cur.turnIndex + 1 });
+    if (next === cur) break;
+    cur = next;
   }
   return cur;
+}
+
+/** Ведущий пропускает ход игрока-человека: ему раскрывается первая доступная карта. */
+export function skipTurn(s: GameState): GameState {
+  const id = currentTurn(s);
+  if (!id) return s;
+  const p = playerById(s, id);
+  const kind = revealableKinds(s, p)[0];
+  return kind ? revealCard(s, id, kind, true) : skipFinished({ ...s, turnIndex: s.turnIndex + 1 });
 }
 
 /** Живые люди, которые ещё не раскрыли карту в этом раунде. */
@@ -267,30 +343,30 @@ export function canLeaveTable(s: GameState, playerId = 'human'): boolean {
   return !!s.revealedThisRound[p.id] || revealableKinds(s, p).length === 0;
 }
 
-/** Людям, не успевшим выбрать, система раскрывает первую доступную карту. */
-function autoRevealHumans(s: GameState): GameState {
-  let cur = s;
-  for (const p of pendingReveals(s)) {
-    const kinds = revealableKinds(cur, playerById(cur, p.id));
-    if (kinds.length) cur = revealCard(cur, p.id, kinds[0]);
-  }
-  return cur;
-}
-
 export function startDiscussion(s: GameState, now: number = Date.now()): GameState {
   if (s.stage !== 'table') return s;
-  const late = pendingReveals(s).map((p) => p.name);
-  const revealed = botsReveal(autoRevealHumans(s));
-  let next: GameState = {
+  const revealed = revealRemaining(s);
+  const next: GameState = {
     ...revealed,
     stage: 'discussion',
-    discussionEndsAt: now + revealed.discussionSeconds * 1000,
+    // Таймер обсуждения запускает ведущий.
+    discussionEndsAt: null,
+    votingEndsAt: null,
     nextBotChatAt: now + 2500,
+    nextBotRevealAt: null,
   };
-  if (late.length) {
-    next = withMessage(next, null, `Не успели выбрать карту — раскрыта автоматически: ${late.join(', ')}.`);
-  }
   return withMessage(next, null, `Раунд ${s.round}. Обсуждение началось. Мест в бункере: ${s.seats}.`);
+}
+
+/** Ведущий запускает таймер текущего этапа (обсуждение или голосование). */
+export function startTimer(s: GameState, now: number): GameState {
+  if (s.stage === 'discussion' && s.discussionEndsAt === null) {
+    return { ...s, discussionEndsAt: now + s.discussionSeconds * 1000 };
+  }
+  if (s.stage === 'voting' && s.votingEndsAt === null) {
+    return { ...s, votingEndsAt: now + s.votingSeconds * 1000 };
+  }
+  return s;
 }
 
 function revealedValue(p: Player): number {
@@ -392,7 +468,7 @@ export function botMessage(s: GameState): GameState {
 
 export function startVoting(s: GameState): GameState {
   if (s.stage !== 'discussion') return s;
-  const base: GameState = { ...s, stage: 'voting', votes: {}, discussionEndsAt: null, nextBotChatAt: null };
+  const base: GameState = { ...s, stage: 'voting', votes: {}, discussionEndsAt: null, votingEndsAt: null, nextBotChatAt: null };
   if (eliminationsThisRound(s) === 0) return resolveRound(base);
   return base;
 }
@@ -505,14 +581,14 @@ export function resolveRound(s: GameState): GameState {
     shieldBlocked,
     tieBroken,
   };
-  return { ...withBots, players, stage: 'result', results: [...withBots.results, result] };
+  return { ...withBots, players, stage: 'result', votingEndsAt: null, results: [...withBots.results, result] };
 }
 
 export function isLastRound(s: GameState): boolean {
   return s.round >= s.totalRounds;
 }
 
-export function nextRound(s: GameState): GameState {
+export function nextRound(s: GameState, now: number = Date.now()): GameState {
   if (s.stage !== 'result') return s;
   if (isLastRound(s)) {
     return { ...s, stage: 'final', final: buildFinal(s) };
@@ -522,9 +598,10 @@ export function nextRound(s: GameState): GameState {
     round: s.round + 1,
     stage: 'table',
     votes: {},
+    votingEndsAt: null,
     revealedThisRound: {},
   };
-  return withMessage(next, null, `Начинается раунд ${next.round}.`);
+  return withMessage(beginTable(next, now), null, `Начинается раунд ${next.round}.`);
 }
 
 /** Пороги итога относительно ориентира base (подобраны симуляцией scripts/simulate.js). */

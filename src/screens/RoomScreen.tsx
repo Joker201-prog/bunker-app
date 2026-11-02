@@ -221,7 +221,7 @@ function Lobby({
         <Stamp label="У двери" size={17} rotate="-3deg" />
         <Text style={styles.settings}>
           {MODE_TEXT[view.settings.hostMode]}; ведущий {view.settings.hostPlays ? 'тоже играет' : 'не играет'}; на
-          обсуждение {view.settings.discussionSeconds} с.
+          обсуждение {view.settings.discussionSeconds} с, на голосование {view.settings.votingSeconds ?? 30} с.
         </Text>
         {view.members.map((m, i) => {
           const marks = [

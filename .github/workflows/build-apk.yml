@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, preview]
   workflow_dispatch:
 
 permissions:
@@ -71,10 +71,34 @@ jobs:
           name: apk
           path: ubezhishe-${{ github.run_number }}.apk
 
+      - name: Prepare release notes
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            sed "s/{{BUILD}}/${{ github.run_number }}/g; s/{{TAG}}/build-${{ github.run_number }}/g" release-notes.md > release-body.md
+          else
+            {
+              echo "**Тестовая сборка** из ветки \`${{ github.ref_name }}\` — для проверки перед выпуском."
+              echo
+              sed "s/{{BUILD}}/${{ github.run_number }}/g; s/{{TAG}}/preview-${{ github.run_number }}/g" release-notes.md
+            } > release-body.md
+          fi
+
       - name: Publish release
+        if: github.ref_name == 'main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Убежище, сборка ${{ github.run_number }}
-          body: APK прототипа игры «Убежище». Установите на Android, разрешив установку из неизвестных источников.
+          body_path: release-body.md
+          files: ubezhishe-${{ github.run_number }}.apk
+
+      - name: Publish test build
+        if: github.ref_name != 'main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: preview-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Убежище, тестовая сборка ${{ github.run_number }}
+          prerelease: true
+          body_path: release-body.md
           files: ubezhishe-${{ github.run_number }}.apk

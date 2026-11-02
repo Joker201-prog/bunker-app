@@ -1,7 +1,7 @@
-import React from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CARD_TEXT, KIND_LABEL, KIND_ORDER } from '../data/cards';
-import type { CardKind, Player } from '../game/types';
+import type { CardKind, Player, RevealEntry } from '../game/types';
 import { colors, fonts, hashIndex, images, spacing, tilt } from '../theme';
 import { Paper, Stamp } from './Desk';
 
@@ -18,6 +18,13 @@ interface Props {
   /** Игрок выбран для голосования: штамп «Против». */
   marked?: boolean;
   onPress?: () => void;
+  /** Журнал раскрытий партии: рядом с картой видно, в каком раунде её открыли. */
+  revealLog?: RevealEntry[];
+  /** Сейчас ход этого игрока раскрывать карту. */
+  isTurn?: boolean;
+  /** Личная заметка о игроке (видна только на этом телефоне). Без onNote заметок нет. */
+  note?: string;
+  onNote?: (text: string) => void;
 }
 
 function photoFor(p: Player) {
@@ -47,9 +54,22 @@ export function Dossier({
   onReveal,
   marked,
   onPress,
+  revealLog,
+  isTurn,
+  note,
+  onNote,
 }: Props) {
   const Wrapper: any = onPress ? Pressable : View;
   const out = !player.alive;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note ?? '');
+  const openedIn: Partial<Record<CardKind, RevealEntry>> = {};
+  for (const r of revealLog ?? []) if (r.playerId === player.id) openedIn[r.kind] = r;
+
+  function saveNote() {
+    setEditing(false);
+    onNote?.(draft.trim());
+  }
 
   return (
     <Wrapper
@@ -66,8 +86,9 @@ export function Dossier({
           <View style={styles.headText}>
             <Text style={styles.number}>Игрок {number}</Text>
             <Text style={styles.name} numberOfLines={1}>
-              ({player.name}){player.isHuman ? ' — вы' : ''}
+              ({player.name}){player.isHuman && secretHint ? ' — вы' : ''}
             </Text>
+            {isTurn && !out && <Text style={styles.turn}>Сейчас раскрывает карту</Text>}
             {secretHint && player.alive && (
               <Stamp label="Секретно" size={15} rotate="-6deg" style={styles.headStamp} />
             )}
@@ -110,6 +131,12 @@ export function Dossier({
                     <Text style={[styles.value, !open && styles.valueHidden]}>
                       {card.title}
                       {!open && secretHint ? '  (скрыто)' : ''}
+                      {open && openedIn[kind] ? (
+                        <Text style={styles.round}>
+                          {'  '}раунд {openedIn[kind]!.round}
+                          {openedIn[kind]!.auto ? ', авто' : ''}
+                        </Text>
+                      ) : null}
                     </Text>
                   ) : (
                     <View style={[styles.redaction, { width: redactionWidth(player.id + kind) }]} />
@@ -121,6 +148,48 @@ export function Dossier({
             );
           })}
         </View>
+
+        {onNote && (
+          <View style={styles.noteBox}>
+            {editing ? (
+              <View>
+                <TextInput
+                  value={draft}
+                  onChangeText={setDraft}
+                  placeholder="Ваши мысли об этом игроке — их видите только вы"
+                  placeholderTextColor={colors.inkSoft}
+                  style={styles.noteInput}
+                  multiline
+                  maxLength={300}
+                  autoFocus
+                  onBlur={saveNote}
+                />
+                <Pressable onPress={saveNote} hitSlop={8} accessibilityRole="button" style={styles.noteDone}>
+                  <Text style={styles.noteAction}>Готово</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => {
+                  setDraft(note ?? '');
+                  setEditing(true);
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={note ? 'Изменить заметку' : 'Добавить заметку'}
+              >
+                {note ? (
+                  <Text style={styles.noteText}>
+                    <Text style={styles.noteLabel}>Заметка: </Text>
+                    {note}
+                  </Text>
+                ) : (
+                  <Text style={styles.noteAction}>✎ Добавить заметку</Text>
+                )}
+              </Pressable>
+            )}
+          </View>
+        )}
       </Paper>
 
       {/* Скрепка поверх листа */}
@@ -161,6 +230,34 @@ const styles = StyleSheet.create({
   },
   name: { fontFamily: fonts.type, fontSize: 15, color: colors.ink },
   headStamp: { marginTop: spacing.sm },
+  turn: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.paper,
+    backgroundColor: colors.stampBlue,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 2,
+  },
+  round: { fontFamily: fonts.type, fontSize: 11, color: colors.inkSoft },
+  noteBox: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.paperLine, paddingTop: spacing.sm },
+  noteLabel: { fontFamily: fonts.bold, color: colors.stampBlue },
+  noteText: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.stampBlue },
+  noteAction: { fontFamily: fonts.type, fontSize: 14, color: colors.stampBlue, textDecorationLine: 'underline' },
+  noteInput: {
+    fontFamily: fonts.type,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.stampBlue,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.stampBlue,
+    minHeight: 44,
+    paddingVertical: 4,
+    textAlignVertical: 'top',
+  },
+  noteDone: { alignSelf: 'flex-end', marginTop: spacing.xs },
 
   fields: { marginTop: spacing.md },
   line: {

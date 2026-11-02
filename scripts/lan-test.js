@@ -89,14 +89,23 @@ async function main() {
       const g = v.game;
       if (g.stage === 'final') break;
       if (g.stage === 'table') {
-        for (const c of clients) {
-          const me = (await state(c)).game.players.find((p) => p.id === c.playerId);
-          if (!me || !me.alive) continue;
-          const kinds = ['profession', 'biology', 'health', 'fact', 'hobby', 'baggage', 'special'].filter((k) => !me.revealed[k]);
-          if (kinds.length) await act(c, { type: 'reveal', kind: g.round === 1 ? 'profession' : kinds[0] });
+        // Раскрытие по очереди: в свой ход раскрывает человек, за ботов ходит сервер
+        for (let k = 0; k < 80; k++) {
+          const cur = (await state(host)).game;
+          if (cur.stage !== 'table') break;
+          const turn = cur.turnOrder[cur.turnIndex];
+          if (!turn) break;
+          const c = clients.find((x) => x.playerId === turn);
+          if (!c) { await new Promise((r) => setTimeout(r, 400)); continue; }
+          const me = cur.players.find((p) => p.id === turn);
+          const kinds = ['profession', 'biology', 'health', 'phobia', 'character', 'hobby', 'fact', 'baggage', 'special'].filter((k) => !me.revealed[k]);
+          const wrong = clients.find((x) => x.playerId !== turn && cur.players.some((p) => p.id === x.playerId && p.alive));
+          if (wrong) check((await act(wrong, { type: 'reveal', kind: 'profession' })).ok === false, 'раскрытие не в свой ход');
+          check((await act(c, { type: 'reveal', kind: cur.round === 1 ? 'profession' : kinds[0] })).ok, 'раскрытие в свой ход');
         }
         await act(host, { type: 'advance' });
       } else if (g.stage === 'discussion') {
+        check((await act(host, { type: 'startTimer' })).ok, 'запуск таймера');
         await act(clients[1], { type: 'chat', text: 'Привет из сети 🙂' });
         await act(host, { type: 'advance' });
       } else if (g.stage === 'voting') {
