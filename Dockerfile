@@ -5,11 +5,12 @@ RUN npm install -g typescript@6.0.3 && npm install --no-save @types/node@22
 COPY server ./server
 COPY src/game ./src/game
 COPY src/data ./src/data
+COPY src/server ./src/server
 RUN cd server && tsc -p tsconfig.json --typeRoots /app/node_modules/@types
 
 FROM node:22-alpine
 WORKDIR /app
 COPY --from=build /app/server/dist ./dist
-ENV PORT=80
-EXPOSE 80
+ENV PORT=8080
+EXPOSE 8080
 CMD ["node", "dist/server/server.js"]

@@ -7,4 +7,4 @@ build:
   dockerfile: Dockerfile
   skip: false
 run:
-  containerPort: 80
+  containerPort: 8080

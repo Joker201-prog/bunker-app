@@ -9,5 +9,5 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["server.ts", "../src/game/**/*.ts", "../src/data/**/*.ts"]
+  "include": ["server.ts", "../src/game/**/*.ts", "../src/data/**/*.ts", "../src/server/core.ts"]
 }

@@ -3,7 +3,8 @@
 React Native (Expo) + TypeScript. Два режима:
 
 - **Игра с ботами** — на одном телефоне, без интернета.
-- **Игра по сети** — каждый со своего телефона, комнаты по четырёхзначному коду, ведущий управляет этапами. Нужен сервер — см. [SERVER.md](SERVER.md).
+- **В этой Wi-Fi сети** — комнату держит телефон ведущего, остальные входят по пятизначному коду. Ничего настраивать не нужно.
+- **Через интернет** — сервер на компьютере и туннель tuna, вход по четырёхзначному коду. См. [SERVER.md](SERVER.md).
 
 Карты, катастрофы и бункеры — собственные.
 
@@ -29,17 +30,19 @@ React Native (Expo) + TypeScript. Два режима:
 - `src/game/engine.ts` — правила: раздача, раунды, боты, голосование, финал.
 - `src/game/actions.ts` — действия игроков и ведущего, таймер, что видит каждый игрок.
 - `src/game/room.ts` — лобби, выбор и передача роли ведущего.
-- `src/net/` — связь с сервером; `src/hooks/useLocalGame.ts` — одиночная игра.
+- `src/server/` — сервер комнат (общий для телефона и компьютера), HTTP поверх TCP, коды комнат в Wi-Fi.
+- `src/net/` — связь с сервером и поиск комнаты в сети; `src/hooks/useLocalGame.ts` — одиночная игра.
 - `src/screens/` — меню, лобби, игровой экран, финал; `src/components/` — досье, листы, штампы, изолента.
-- `server/server.ts` — игровой сервер; `Dockerfile`, `amvera.yml` — его запуск.
+- `server/server.ts` — сервер для компьютера; `pc-server/` и `tools/make_pc_server.sh` — пакет с запуском двойным щелчком.
 - `tools/make_textures.py` — генерация текстур дерева, бумаги, силуэтов.
 
 ## Проверка
 
 ```
-tsc -p tsconfig.engine.json
+tsc -p tsconfig.engine.json --types node
 node scripts/simulate.js     # 3000 одиночных партий
 node scripts/room-test.js    # лобби, ведущий, сетевые действия
+node scripts/lan-test.js     # сервер «в этой сети»: HTTP поверх TCP
 cd server && tsc -p tsconfig.json && cd .. && node scripts/server-test.js   # сервер по HTTP
 ```
 

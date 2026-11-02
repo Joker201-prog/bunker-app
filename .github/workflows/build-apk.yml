@@ -35,7 +35,7 @@ jobs:
 
       - name: Install native modules and fonts
         working-directory: app
-        run: npx expo install expo-font expo-splash-screen expo-build-properties react-native-safe-area-context @react-native-async-storage/async-storage @expo-google-fonts/oswald @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
+        run: npx expo install expo-font expo-splash-screen expo-build-properties react-native-safe-area-context @react-native-async-storage/async-storage expo-network expo-keep-awake react-native-tcp-socket buffer @expo-google-fonts/oswald @expo-google-fonts/pt-sans @expo-google-fonts/pt-mono
 
       - name: Configure app.json
         working-directory: app

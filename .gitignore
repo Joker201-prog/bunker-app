@@ -3,3 +3,4 @@ node_modules/
 app/
 *.apk
 server/dist/
+dist-pc/

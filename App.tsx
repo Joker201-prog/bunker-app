@@ -12,9 +12,10 @@ import type { RoomSettings } from './src/game/room';
 import type { GameState } from './src/game/types';
 import { LOCAL_PLAYER, useLocalGame } from './src/hooks/useLocalGame';
 import { createRoom, DEFAULT_SERVER, joinRoom, normalizeServer, type Session } from './src/net/api';
+import { findLanRoom, startLanHost, stopLanHost } from './src/net/lan';
 import { loadSaved, saveSaved } from './src/net/storage';
 import { GameScreen } from './src/screens/GameScreen';
-import { CreateRoomScreen, HomeScreen, JoinScreen, LocalSetupScreen } from './src/screens/MenuScreens';
+import { CreateRoomScreen, HomeScreen, JoinScreen, LocalSetupScreen, type RoomPlace } from './src/screens/MenuScreens';
 import { RoomScreen } from './src/screens/RoomScreen';
 import { colors, images } from './src/theme';
 
@@ -39,6 +40,7 @@ export default function App() {
   const [server, setServer] = useState(DEFAULT_SERVER);
   const [saved, setSaved] = useState<Session | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,26 +57,64 @@ export default function App() {
   }
 
   function enterRoom(session: Session) {
-    setSaved(session);
-    saveSaved({ session });
+    // Комнату, которую держит этот телефон, после перезапуска приложения не вернуть: сервер останавливается.
+    if (!session.lanHost) {
+      setSaved(session);
+      saveSaved({ session });
+    }
     go({ name: 'room', session });
   }
 
-  async function withServer(fn: (srv: string, playerName: string) => Promise<Session>) {
-    const srv = normalizeServer(server);
-    if (!srv) {
-      setError('Сначала укажите адрес сервера на главном экране.');
-      return;
-    }
+  function updateServer(v: string) {
+    setServer(v);
+    saveSaved({ server: v.trim() });
+  }
+
+  async function attempt(fn: (playerName: string) => Promise<Session>) {
     setBusy(true);
+    setProgress(null);
     setError(null);
     try {
-      enterRoom(await fn(srv, name.trim() || 'Игрок'));
+      enterRoom(await fn(name.trim() || 'Игрок'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка');
     } finally {
       setBusy(false);
+      setProgress(null);
     }
+  }
+
+  function onlineServer(): string {
+    const srv = normalizeServer(server);
+    if (!srv) throw new Error('Укажите адрес сервера.');
+    return srv;
+  }
+
+  function create(place: RoomPlace, settings: Partial<RoomSettings>) {
+    attempt(async (n) => {
+      if (place === 'online') return createRoom(onlineServer(), n, settings);
+      const base = await startLanHost();
+      try {
+        const session = await createRoom(base, n, settings);
+        return { ...session, lan: true, lanHost: true };
+      } catch (e) {
+        stopLanHost();
+        throw e;
+      }
+    });
+  }
+
+  function join(code: string) {
+    attempt(async (n) => {
+      if (code.length === 4) return joinRoom(onlineServer(), code, n);
+      setProgress('Ищем комнату в вашей Wi-Fi сети…');
+      const base = await findLanRoom(code, (checked, total) =>
+        setProgress(`Ищем комнату в вашей Wi-Fi сети… проверено ${checked} из ${total} адресов`),
+      );
+      setProgress('Комната найдена, входим…');
+      const session = await joinRoom(base, code, n);
+      return { ...session, lan: true };
+    });
   }
 
   if (!fontsLoaded) return <View style={styles.root} />;
@@ -88,11 +128,6 @@ export default function App() {
           onName={(v) => {
             setName(v);
             saveSaved({ name: v });
-          }}
-          server={server}
-          onServer={(v) => {
-            setServer(v);
-            saveSaved({ server: v.trim() });
           }}
           resumeCode={saved ? saved.code : null}
           onResume={() => saved && go({ name: 'room', session: saved })}
@@ -129,8 +164,10 @@ export default function App() {
         <CreateRoomScreen
           busy={busy}
           error={error}
+          server={server}
+          onServer={updateServer}
           onBack={() => go({ name: 'home' })}
-          onCreate={(settings: Partial<RoomSettings>) => withServer((srv, n) => createRoom(srv, n, settings))}
+          onCreate={create}
         />
       );
       break;
@@ -138,9 +175,12 @@ export default function App() {
       content = (
         <JoinScreen
           busy={busy}
+          progress={progress}
           error={error}
+          server={server}
+          onServer={updateServer}
           onBack={() => go({ name: 'home' })}
-          onJoin={(code) => withServer((srv, n) => joinRoom(srv, code, n))}
+          onJoin={join}
         />
       );
       break;
@@ -150,6 +190,7 @@ export default function App() {
           key={screen.session.token}
           session={screen.session}
           onLeave={(reason) => {
+            if (screen.session.lanHost) stopLanHost();
             setSaved(null);
             saveSaved({ session: null });
             go({ name: 'home' });

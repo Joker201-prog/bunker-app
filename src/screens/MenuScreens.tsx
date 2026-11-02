@@ -48,8 +48,6 @@ function ErrorLine({ text }: { text: string | null }) {
 export function HomeScreen({
   name,
   onName,
-  server,
-  onServer,
   resumeCode,
   onResume,
   onCreate,
@@ -58,15 +56,12 @@ export function HomeScreen({
 }: {
   name: string;
   onName: (v: string) => void;
-  server: string;
-  onServer: (v: string) => void;
   resumeCode: string | null;
   onResume: () => void;
   onCreate: () => void;
   onJoin: () => void;
   onLocal: () => void;
 }) {
-  const [showServer, setShowServer] = useState(!server);
   return (
     <MenuLayout>
       <Text style={styles.title}>«Убежище»</Text>
@@ -91,32 +86,29 @@ export function HomeScreen({
       <DeskButton label="Создать комнату" onPress={onCreate} style={styles.btn} />
       <DeskButton label="Войти по коду" onPress={onJoin} style={styles.btn} />
       <DeskButton label="Игра с ботами" variant="secondary" onPress={onLocal} style={styles.btn} />
-
-      <Pressable onPress={() => setShowServer((v) => !v)} style={styles.serverToggle} hitSlop={8}>
-        <Text style={styles.serverToggleText}>
-          {server ? `Сервер: ${server.replace(/^https?:\/\//, '')}` : 'Сервер не указан — нужен для игры по сети'}
-        </Text>
-      </Pressable>
-      {showServer && (
-        <Paper rotate="0.5deg" style={styles.serverBox}>
-          <Text style={styles.label}>Адрес игрового сервера:</Text>
-          <TextInput
-            value={server}
-            onChangeText={onServer}
-            placeholder="например, ubezhishe.onrender.com"
-            placeholderTextColor={colors.inkSoft}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            style={styles.input}
-          />
-          <Text style={styles.hint}>
-            Его даёт тот, кто запустил сервер. Для сервера на компьютере в домашней сети пишите с http://, например
-            http://192.168.1.10:8080. Для игры с ботами адрес не нужен.
-          </Text>
-        </Paper>
-      )}
     </MenuLayout>
+  );
+}
+
+/** Поле адреса сервера для игры через интернет (сервер на компьютере + tuna). */
+function ServerField({ server, onServer }: { server: string; onServer: (v: string) => void }) {
+  return (
+    <View>
+      <Text style={[styles.label, styles.gapTop]}>Адрес сервера:</Text>
+      <TextInput
+        value={server}
+        onChangeText={onServer}
+        placeholder="например, brave-otter-4821.ru.tuna.am"
+        placeholderTextColor={colors.inkSoft}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        style={styles.input}
+      />
+      <Text style={styles.hint}>
+        Адрес туннеля tuna с компьютера, где запущен сервер. Приложение его запомнит.
+      </Text>
+    </View>
   );
 }
 
@@ -163,23 +155,48 @@ const HOST_MODES: { mode: HostMode; title: string; text: string }[] = [
   { mode: 'vote', title: 'Голосование', text: 'В лобби все голосуют, кто будет вести.' },
 ];
 
+export type RoomPlace = 'lan' | 'online';
+
 export function CreateRoomScreen({
   busy,
   error,
+  server,
+  onServer,
   onCreate,
   onBack,
 }: {
   busy: boolean;
   error: string | null;
-  onCreate: (settings: Partial<RoomSettings>) => void;
+  server: string;
+  onServer: (v: string) => void;
+  onCreate: (place: RoomPlace, settings: Partial<RoomSettings>) => void;
   onBack: () => void;
 }) {
+  const [place, setPlace] = useState<RoomPlace>('lan');
   const [hostMode, setHostMode] = useState<HostMode>('creator');
   const [hostPlays, setHostPlays] = useState(true);
   const [seconds, setSeconds] = useState(60);
+  const needServer = place === 'online' && !server.trim();
   return (
     <MenuLayout onBack={onBack}>
       <Text style={styles.heading}>Новая комната</Text>
+
+      <Paper rotate="0.6deg" style={styles.form}>
+        <Text style={styles.label}>Где играем:</Text>
+        <Choice
+          title="В этой Wi-Fi сети"
+          text="Все рядом, в одной Wi-Fi сети или на точке доступа этого телефона. Комнату держит этот телефон — не сворачивайте приложение."
+          selected={place === 'lan'}
+          onPress={() => setPlace('lan')}
+        />
+        <Choice
+          title="Через интернет"
+          text="Игроки могут быть где угодно. Нужен сервер на компьютере с туннелем tuna."
+          selected={place === 'online'}
+          onPress={() => setPlace('online')}
+        />
+        {place === 'online' && <ServerField server={server} onServer={onServer} />}
+      </Paper>
 
       <Paper rotate="-0.6deg" style={styles.form}>
         <Text style={styles.label}>Кто ведущий:</Text>
@@ -221,11 +238,11 @@ export function CreateRoomScreen({
       <ErrorLine text={error} />
       <DeskButton
         label={busy ? 'Создаём…' : 'Создать комнату'}
-        disabled={busy}
-        onPress={() => onCreate({ hostMode, hostPlays, discussionSeconds: seconds })}
+        disabled={busy || needServer}
+        onPress={() => onCreate(place, { hostMode, hostPlays, discussionSeconds: seconds })}
         style={styles.btnBig}
       />
-      {busy && <Text style={styles.wake}>Если сервер спал, первое подключение займёт до минуты.</Text>}
+      {needServer && <Text style={styles.wake}>Укажите адрес сервера выше.</Text>}
     </MenuLayout>
   );
 }
@@ -251,17 +268,26 @@ function Choice({ title, text, selected, onPress }: { title: string; text: strin
 
 export function JoinScreen({
   busy,
+  progress,
   error,
+  server,
+  onServer,
   onJoin,
   onBack,
 }: {
   busy: boolean;
+  /** Текст хода поиска комнаты в сети. */
+  progress: string | null;
   error: string | null;
+  server: string;
+  onServer: (v: string) => void;
   onJoin: (code: string) => void;
   onBack: () => void;
 }) {
   const [code, setCode] = useState('');
-  const valid = /^\d{4}$/.test(code);
+  const lan = code.length === 5;
+  const online = code.length === 4;
+  const needServer = online && !server.trim();
   return (
     <MenuLayout onBack={onBack}>
       <Text style={styles.heading}>Вход в комнату</Text>
@@ -269,24 +295,31 @@ export function JoinScreen({
         <Text style={styles.label}>Код комнаты:</Text>
         <TextInput
           value={code}
-          onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 4))}
-          placeholder="0000"
+          onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 5))}
+          placeholder="00000"
           placeholderTextColor={colors.paperLine}
           keyboardType="number-pad"
-          maxLength={4}
+          maxLength={5}
           style={styles.codeInput}
           autoFocus
         />
-        <Text style={styles.hint}>Четыре цифры — их видно у создателя комнаты.</Text>
+        <Text style={styles.hint}>
+          {lan
+            ? 'Пять цифр — комната в Wi-Fi сети. Подключитесь к той же сети, что и ведущий.'
+            : online
+              ? 'Четыре цифры — комната через интернет.'
+              : 'Код показывает создатель комнаты: пять цифр — игра в Wi-Fi сети, четыре — через интернет.'}
+        </Text>
+        {online && <ServerField server={server} onServer={onServer} />}
       </Paper>
       <ErrorLine text={error} />
       <DeskButton
-        label={busy ? 'Входим…' : 'Войти'}
-        disabled={!valid || busy}
+        label={busy ? (lan ? 'Ищем комнату…' : 'Входим…') : 'Войти'}
+        disabled={!(lan || online) || needServer || busy}
         onPress={() => onJoin(code)}
         style={styles.btnBig}
       />
-      {busy && <Text style={styles.wake}>Если сервер спал, первое подключение займёт до минуты.</Text>}
+      {busy && progress && <Text style={styles.wake}>{progress}</Text>}
     </MenuLayout>
   );
 }
@@ -348,7 +381,7 @@ const styles = StyleSheet.create({
   codeInput: {
     fontFamily: fonts.display,
     fontSize: 48,
-    letterSpacing: 14,
+    letterSpacing: 10,
     color: colors.ink,
     borderBottomWidth: 2,
     borderBottomColor: colors.ink,

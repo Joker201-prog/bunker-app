@@ -1,20 +1,24 @@
 /** Обращения к игровому серверу. */
 import type { RoomAction, RoomSettings, RoomView } from '../game/room';
 
-/** Адрес сервера по умолчанию. Можно поменять на главном экране. */
-export const DEFAULT_SERVER = 'https://ubezhishe.onrender.com';
-
 /**
- * Бесплатный сервер засыпает без игроков и просыпается до минуты,
- * поэтому создание комнаты и вход ждут ответа дольше обычного.
+ * Адрес сервера для игры через интернет по умолчанию (сервер на компьютере + туннель tuna).
+ * Пусто — адрес вводится в приложении.
  */
-const WAKE_TIMEOUT_MS = 75_000;
+export const DEFAULT_SERVER = '';
+
+/** Создание комнаты и вход ждут дольше обычного: туннель или сервер могут отвечать медленно. */
+const WAKE_TIMEOUT_MS = 45_000;
 
 export interface Session {
   server: string;
   code: string;
   playerId: string;
   token: string;
+  /** Комната в Wi-Fi сети, сервер которой работает на этом телефоне. */
+  lanHost?: boolean;
+  /** Комната в Wi-Fi сети (на этом или другом телефоне). */
+  lan?: boolean;
 }
 
 export class ApiError extends Error {
@@ -26,7 +30,7 @@ export class ApiError extends Error {
 }
 
 export function normalizeServer(raw: string): string {
-  let s = raw.trim().replace(/\/+$/, '');
+  let s = raw.trim().replace(/\s+/g, '').replace(/\/+$/, '');
   if (s && !/^https?:\/\//i.test(s)) s = 'https://' + s;
   return s;
 }
@@ -35,7 +39,11 @@ async function request<T>(url: string, init: RequestInit & { timeoutMs?: number 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? 12_000);
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
+    const res = await fetch(url, {
+      ...init,
+      headers: { Accept: 'application/json', ...(init.headers as Record<string, string> | undefined) },
+      signal: controller.signal,
+    });
     let body: any = null;
     try {
       body = await res.json();
@@ -49,7 +57,7 @@ async function request<T>(url: string, init: RequestInit & { timeoutMs?: number 
   } catch (e: any) {
     if (e instanceof ApiError) throw e;
     if (e?.name === 'AbortError') throw new ApiError('Сервер не ответил вовремя', 0);
-    throw new ApiError('Нет связи с сервером. Проверьте интернет и адрес сервера.', 0);
+    throw new ApiError('Нет связи с сервером. Проверьте интернет и адрес сервера (на компьютере должны работать сервер и tuna).', 0);
   } finally {
     clearTimeout(timer);
   }

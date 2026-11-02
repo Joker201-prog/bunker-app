@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { DeskButton, Paper, Stamp, Tape } from '../components/Desk';
 import { secondsLeft } from '../game/actions';
 import { MIN_PLAYERS } from '../game/engine';
@@ -27,6 +28,15 @@ export function RoomScreen({
   const { view, link, clockOffset, send } = useRoom(session, (reason) => onLeave(reason));
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
+
+  // Телефон, который держит комнату в Wi-Fi сети, не должен засыпать: иначе сервер остановится.
+  useEffect(() => {
+    if (!session.lanHost) return;
+    activateKeepAwakeAsync('lan-room').catch(() => {});
+    return () => {
+      deactivateKeepAwake('lan-room');
+    };
+  }, [session.lanHost]);
 
   const inDiscussion = view?.game?.stage === 'discussion';
   useEffect(() => {
@@ -75,9 +85,11 @@ export function RoomScreen({
         secondsLeft={secondsLeft(view.game, now + clockOffset)}
         onExit={leave}
         exitWarning={
-          isHost
-            ? 'Роль ведущего перейдёт другому игроку, а за вас доиграет бот.'
-            : 'За вас доиграет бот. Вернуться в эту партию будет нельзя.'
+          session.lanHost
+            ? 'Комнату держит ваш телефон: если выйти, партия закончится у всех.'
+            : isHost
+              ? 'Роль ведущего перейдёт другому игроку, а за вас доиграет бот.'
+              : 'За вас доиграет бот. Вернуться в эту партию будет нельзя.'
         }
         online={{ code: view.code, hostName: host ? host.name : null, linkOk: link !== 'offline' }}
         finalActions={
@@ -94,17 +106,31 @@ export function RoomScreen({
     );
   }
 
-  return <Lobby view={view} linkOk={link !== 'offline'} error={error} run={run} onLeave={leave} />;
+  return (
+    <Lobby
+      view={view}
+      lan={!!session.lan}
+      lanHost={!!session.lanHost}
+      linkOk={link !== 'offline'}
+      error={error}
+      run={run}
+      onLeave={leave}
+    />
+  );
 }
 
 function Lobby({
   view,
+  lan,
+  lanHost,
   linkOk,
   error,
   run,
   onLeave,
 }: {
   view: RoomView;
+  lan: boolean;
+  lanHost: boolean;
   linkOk: boolean;
   error: string | null;
   run: (a: RoomAction) => Promise<string | null>;
@@ -118,10 +144,14 @@ function Lobby({
   const canStart = participants >= MIN_PLAYERS;
 
   function confirmLeave() {
-    Alert.alert('Выйти из комнаты?', 'Чтобы вернуться, понадобится снова ввести код.', [
+    Alert.alert(
+      'Выйти из комнаты?',
+      lanHost ? 'Комнату держит ваш телефон: если выйти, она закроется у всех.' : 'Чтобы вернуться, понадобится снова ввести код.',
+      [
       { text: 'Остаться', style: 'cancel' },
-      { text: 'Выйти', style: 'destructive', onPress: onLeave },
-    ]);
+        { text: 'Выйти', style: 'destructive', onPress: onLeave },
+      ],
+    );
   }
 
   useEffect(() => {
@@ -175,7 +205,16 @@ function Lobby({
 
       <Text style={styles.heading}>Комната</Text>
       <Tape label={`Код: ${view.code}`} size={36} rotate="-2deg" style={styles.codeTape} />
-      <Text style={styles.woodNote}>Сообщите код друзьям: в приложении «Войти по коду».</Text>
+      <Text style={styles.woodNote}>
+        {lan
+          ? 'Сообщите код друзьям: «Войти по коду», подключившись к той же Wi-Fi сети или к точке доступа этого телефона.'
+          : 'Сообщите код друзьям: в приложении «Войти по коду».'}
+      </Text>
+      {lanHost && (
+        <Text style={styles.hostWarn}>
+          Комнату держит этот телефон. Не сворачивайте приложение и не блокируйте экран, пока идёт игра.
+        </Text>
+      )}
       {!linkOk && <Text style={styles.offline}>Нет связи с сервером, переподключаемся…</Text>}
 
       <Paper rotate="-0.5deg" style={styles.list}>
@@ -253,6 +292,18 @@ const styles = StyleSheet.create({
   codeTape: { marginTop: spacing.md },
   woodText: { fontFamily: fonts.type, fontSize: 15, lineHeight: 22, color: colors.onWood, marginTop: spacing.lg },
   woodNote: { fontFamily: fonts.type, fontSize: 13, lineHeight: 19, color: colors.onWoodMuted, marginTop: spacing.md, textAlign: 'center' },
+  hostWarn: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.onWood,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.onWoodMuted,
+    padding: spacing.sm,
+    borderRadius: 3,
+  },
   offline: { fontFamily: fonts.body, fontSize: 14, color: '#ffb3a8', textAlign: 'center', marginTop: spacing.sm },
   list: { marginTop: spacing.xl },
   settings: { fontFamily: fonts.type, fontSize: 13, lineHeight: 18, color: colors.inkSoft, marginTop: spacing.md, marginBottom: spacing.sm },
