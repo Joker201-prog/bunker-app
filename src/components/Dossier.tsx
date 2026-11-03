@@ -106,7 +106,7 @@ function CardRow({
   const visible = open || mine || !player.alive;
   const hasDetails = visible && !!card.id && !!CARD_TEXT[card.id];
 
-  // Раскрытие: плашка цензуры стирается слева направо, дописывается ✓/✗, появляется бирка.
+  // Раскрытие: плашка цензуры стирается слева направо, появляется бирка «раунд N».
   const wipe = useRef(new Animated.Value(1)).current;
   const wasOpen = useRef(open);
   const [playing, setPlaying] = useState(false);
@@ -126,7 +126,6 @@ function CardRow({
     );
   }, [open, wipe, player.isHuman]);
 
-  const mark = visible && card.value > 0 ? '✓' : visible && card.value < 0 ? '✗' : '';
   const Line: any = hasDetails ? Pressable : View;
   return (
     <Line
@@ -135,15 +134,6 @@ function CardRow({
       accessibilityHint={hasDetails ? 'Открывает полное описание карты' : undefined}
       style={styles.row}
     >
-      <Animated.Text
-        style={[
-          styles.mark,
-          { color: card.value > 0 ? colors.good : colors.bad },
-          open && fresh ? { opacity: wipe.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0, 0, 1] }) } : null,
-        ]}
-      >
-        {mark}
-      </Animated.Text>
       <View style={styles.rowBody}>
         <Text style={styles.kind}>{KIND_LABEL[kind].toUpperCase()}</Text>
         {visible ? (
@@ -312,7 +302,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.paperLine,
   },
-  mark: { width: 16, textAlign: 'center', fontFamily: fonts.bold, fontSize: 15 },
   rowBody: { flex: 1, minWidth: 0, paddingVertical: 3 },
   kind: { fontFamily: fonts.type, fontSize: 11, letterSpacing: 0.5, color: colors.inkSoft },
   value: { fontFamily: fonts.body, fontSize: 15, lineHeight: 19, color: colors.ink },

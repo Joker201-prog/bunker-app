@@ -809,10 +809,7 @@ function OutBlock({
               const c = player.cards[k];
               return (
                 <Text key={k} style={styles.shownLine} numberOfLines={1}>
-                  <Text style={{ color: c.value >= 0 ? colors.good : colors.bad, fontFamily: fonts.bold }}>
-                    {c.value >= 0 ? '✓' : '✗'}
-                  </Text>{' '}
-                  {c.title}
+                  — {c.title}
                 </Text>
               );
             })}

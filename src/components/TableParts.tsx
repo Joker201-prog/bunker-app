@@ -186,9 +186,6 @@ export function MiniDossier({
                 <>
                   <Text style={styles.miniKind}>{KIND_LABEL[last]}</Text>
                   <Text style={styles.miniCard} numberOfLines={2}>
-                    <Text style={{ color: card.value >= 0 ? colors.good : colors.bad, fontFamily: fonts.bold }}>
-                      {card.value >= 0 ? '✓' : '✗'}
-                    </Text>{' '}
                     {card.title}
                   </Text>
                 </>
