@@ -34,6 +34,7 @@ import {
   SeatsStrip,
   TimerStamp,
 } from '../components/TableParts';
+import { KIND_LABEL, KIND_ORDER } from '../data/cards';
 import type { Action } from '../game/actions';
 import {
   alivePlayers,
@@ -382,7 +383,7 @@ export function GameScreen({ game, viewerId, send, secondsLeft, onExit, exitWarn
               />
             ))}
         </View>
-        <Text style={styles.footNote}>Долгое нажатие на фото — открыть досье. Всего у двери {aliveCount}.</Text>
+        <Text style={styles.footNote}>Нажмите на листок, чтобы выбрать. Долгое нажатие — полное досье. Всего у двери {aliveCount}.</Text>
       </>
     );
     bar = (
@@ -541,9 +542,12 @@ function TimerButtons({
   );
 }
 
-const POLA_TILTS = ['-1.5deg', '1deg', '-0.5deg', '2deg', '-1deg', '0.8deg', '-1.8deg', '1.2deg'];
+const POLA_TILTS = ['-0.8deg', '0.6deg', '-0.4deg', '0.9deg', '-0.6deg', '0.5deg', '-0.9deg', '0.7deg'];
 
-/** Кандидат на голосовании: фото-«полароид», выбранный — красная рамка и штамп «ПРОТИВ». */
+/**
+ * Кандидат на голосовании: листок с фото-«полароидом» и всеми раскрытыми характеристиками.
+ * Выбранный — красная рамка и штамп «ПРОТИВ».
+ */
 function Polaroid({
   player,
   number,
@@ -561,6 +565,7 @@ function Polaroid({
 }) {
   const shake = useRef(new Animated.Value(0)).current;
   const wasPicked = useRef(picked);
+  const opened = KIND_ORDER.filter((k) => player.revealed[k]);
   useEffect(() => {
     if (picked && !wasPicked.current && !isReduceMotion()) {
       // лист вздрагивает от удара печати
@@ -590,10 +595,29 @@ function Polaroid({
             { transform: [{ translateX: shake.interpolate({ inputRange: [-1, 1], outputRange: [-3, 3] }) }] },
           ]}
         >
-          <Image source={photoFor(player)} style={styles.polaPhoto} />
-          <Text style={styles.polaName} numberOfLines={1}>
-            {number} · {player.name}
-          </Text>
+          <View style={styles.polaHead}>
+            <View style={styles.polaFrame}>
+              <Image source={photoFor(player)} style={styles.polaPhoto} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.polaNum}>№ {number}</Text>
+              <Text style={styles.polaName} numberOfLines={2}>
+                {player.name}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.polaCards}>
+            {opened.length === 0 ? (
+              <Text style={styles.polaKind}>ещё ничего не открыто</Text>
+            ) : (
+              opened.map((k) => (
+                <View key={k} style={styles.polaLine}>
+                  <Text style={styles.polaKind}>{KIND_LABEL[k]}</Text>
+                  <Text style={styles.polaCard}>{player.cards[k].title}</Text>
+                </View>
+              ))
+            )}
+          </View>
         </Animated.View>
         {picked && <StampHit label="Против" size={17} rotate="-14deg" feel="medium" fill style={styles.polaStamp} />}
       </Pressable>
@@ -963,11 +987,10 @@ const styles = StyleSheet.create({
   send: { width: 112 },
 
   polaroids: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 18, marginHorizontal: -5 },
-  polaWrap: { width: '33.33%', paddingHorizontal: 5, paddingBottom: 14 },
+  polaWrap: { width: '50%', paddingHorizontal: 5, paddingBottom: 14 },
   pola: {
-    backgroundColor: colors.paperWhite,
-    padding: 5,
-    paddingBottom: 0,
+    backgroundColor: colors.paper,
+    padding: 8,
     elevation: 6,
     shadowColor: '#000',
     shadowOpacity: 0.5,
@@ -975,11 +998,29 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     borderWidth: 3,
     borderColor: 'transparent',
+    borderRadius: 2,
   },
   polaPicked: { borderColor: colors.stampDark },
-  polaPhoto: { width: '100%', height: 96 },
-  polaName: { fontFamily: fonts.display, fontSize: 14, color: colors.ink, textAlign: 'center', paddingVertical: 5, letterSpacing: 0.5 },
-  polaStamp: { position: 'absolute', top: 36, alignSelf: 'center' },
+  polaHead: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  polaFrame: {
+    backgroundColor: colors.paperWhite,
+    padding: 3,
+    paddingBottom: 8,
+    transform: [{ rotate: '-2deg' }],
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  polaPhoto: { width: 52, height: 62 },
+  polaNum: { fontFamily: fonts.type, fontSize: 11, color: colors.inkSoft },
+  polaName: { fontFamily: fonts.display, fontSize: 17, lineHeight: 20, color: colors.ink },
+  polaCards: { marginTop: 8, borderTopWidth: 1, borderTopColor: colors.paperLine, paddingTop: 4 },
+  polaLine: { paddingVertical: 3, borderBottomWidth: 1, borderBottomColor: 'rgba(185, 166, 127, 0.5)' },
+  polaKind: { fontFamily: fonts.type, fontSize: 10, color: colors.inkSoft, textTransform: 'uppercase' },
+  polaCard: { fontFamily: fonts.body, fontSize: 13, lineHeight: 16, color: colors.ink },
+  polaStamp: { position: 'absolute', top: 30, alignSelf: 'center' },
   footNote: { fontFamily: fonts.type, fontSize: 12, lineHeight: 17, color: colors.onWoodSoft, marginTop: 4, textAlign: 'center' },
 
   resultHead: { alignItems: 'center', marginTop: 4 },
