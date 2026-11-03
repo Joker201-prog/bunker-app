@@ -39,12 +39,13 @@ export function RoomScreen({
     };
   }, [session.lanHost]);
 
-  const inDiscussion = view?.game?.stage === 'discussion';
+  // Часы для таймера обсуждения и голосования: обновление каждую секунду.
+  const timerStage = view?.game?.stage === 'discussion' || view?.game?.stage === 'voting';
   useEffect(() => {
-    if (!inDiscussion) return;
-    const id = setInterval(() => setNow(Date.now()), 500);
+    if (!timerStage) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
-  }, [inDiscussion]);
+  }, [timerStage]);
 
   useEffect(() => {
     if (!error) return;

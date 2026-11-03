@@ -254,12 +254,20 @@ export default function App() {
 /** Одиночная партия: игрок и ведущий — это вы, остальные — боты. */
 function LocalGame({ initial, onExit, onAgain }: { initial: GameState; onExit: () => void; onAgain: () => void }) {
   const { state, send } = useLocalGame(initial);
+  // Часы для таймера: секунды обновляются каждую секунду, даже когда в партии ничего не меняется.
+  const [now, setNow] = useState(Date.now());
+  const timerOn = state.discussionEndsAt !== null || state.votingEndsAt !== null;
+  useEffect(() => {
+    if (!timerOn) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [timerOn]);
   return (
     <GameScreen
       game={state}
       viewerId={LOCAL_PLAYER}
       send={send}
-      secondsLeft={secondsLeft(state)}
+      secondsLeft={secondsLeft(state, Math.max(now, Date.now()))}
       onExit={onExit}
       exitWarning="Прогресс партии будет потерян."
       finalActions={
