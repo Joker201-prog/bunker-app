@@ -13,7 +13,8 @@ export interface TcpSocketLike {
   on(event: 'data', cb: (data: any) => void): any;
   on(event: 'error' | 'close' | 'end', cb: (...args: any[]) => void): any;
   write(data: any): any;
-  end(): any;
+  /** end(data): отправить и закрыть — закрытие только после отправки. */
+  end(data?: any): any;
   destroy(): any;
 }
 
@@ -58,8 +59,9 @@ function writeResponse(socket: TcpSocketLike, status: number, body: unknown) {
     `Content-Length: ${payload.length}\r\n` +
     'Connection: close\r\n\r\n';
   try {
-    socket.write(Buffer.concat([Buffer.from(head, 'latin1'), payload]));
-    socket.end();
+    // Ответ передаётся в end(): на телефоне запись асинхронная, и отдельный end() сразу после write()
+    // может закрыть соединение раньше, чем ответ уйдёт — клиент получит «нет связи».
+    socket.end(Buffer.concat([Buffer.from(head, 'latin1'), payload]));
   } catch {
     // Клиент уже отключился.
   }
