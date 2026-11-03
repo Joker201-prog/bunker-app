@@ -31,58 +31,65 @@ export function EventSheet({
         <Text style={styles.meta}>
           {c.kind}, сложность {c.difficulty} из 3 · в бункере {monthsText(c.months)}
         </Text>
-        {expanded && (
-          <View>
-            <Text style={styles.text}>{c.text}</Text>
-
-            <Text style={styles.sub}>Население:</Text>
-            <Text style={styles.text}>
-              было {c.population}, выжило {c.survivors} ({String(c.survivorsPercent).replace('.', ',')}%).
-            </Text>
-
-            <Text style={styles.sub}>Сколько сидеть в бункере:</Text>
-            <Text style={styles.text}>
-              {monthsText(c.months)}.{c.monthsReason ? ` ${c.monthsReason}` : ''}
-            </Text>
-
-            <Text style={styles.sub}>Снаружи:</Text>
-            <Text style={styles.text}>{c.outside}.</Text>
-
-            <Text style={styles.sub}>Главные проблемы:</Text>
-            {c.problems.map((p) => (
-              <Text key={p} style={styles.text}>
-                — {p}
-              </Text>
-            ))}
-
-            <Text style={styles.sub}>Без чего не выжить:</Text>
-            <Text style={styles.strong}>{c.needs.map((n) => TAG_LABEL[n]).join(', ')}.</Text>
-            {c.valued.length > c.needs.length && (
-              <>
-                <Text style={styles.sub}>Тоже пригодится:</Text>
-                <Text style={styles.text}>
-                  {c.valued.filter((t) => !c.needs.includes(t)).map((n) => TAG_LABEL[n]).join(', ')}.
-                </Text>
-              </>
-            )}
-            {c.useless.length > 0 && (
-              <>
-                <Text style={styles.sub}>Здесь бесполезно:</Text>
-                <Text style={styles.text}>{c.useless.map((n) => TAG_LABEL[n]).join(', ')}.</Text>
-              </>
-            )}
-
-            <Text style={styles.sub}>Что есть в бункере:</Text>
-            {state.bunker.map((b) => (
-              <Text key={b.title} style={styles.text}>
-                <Text style={{ color: b.bonus >= 0 ? colors.good : colors.bad }}>{b.bonus >= 0 ? '+ ' : '− '}</Text>
-                {b.title}. {b.text}
-              </Text>
-            ))}
-          </View>
-        )}
+        {expanded && <EventDetails state={state} />}
       </Paper>
     </Pressable>
+  );
+}
+
+
+/** Полное описание катастрофы и бункера (раскрывается по «подробнее»). */
+export function EventDetails({ state }: { state: GameState }) {
+  const c = state.catastrophe;
+  return (
+    <View>
+    <Text style={styles.text}>{c.text}</Text>
+
+    <Text style={styles.sub}>Население:</Text>
+    <Text style={styles.text}>
+      было {c.population}, выжило {c.survivors} ({String(c.survivorsPercent).replace('.', ',')}%).
+    </Text>
+
+    <Text style={styles.sub}>Сколько сидеть в бункере:</Text>
+    <Text style={styles.text}>
+      {monthsText(c.months)}.{c.monthsReason ? ` ${c.monthsReason}` : ''}
+    </Text>
+
+    <Text style={styles.sub}>Снаружи:</Text>
+    <Text style={styles.text}>{c.outside}.</Text>
+
+    <Text style={styles.sub}>Главные проблемы:</Text>
+    {c.problems.map((p) => (
+      <Text key={p} style={styles.text}>
+        — {p}
+      </Text>
+    ))}
+
+    <Text style={styles.sub}>Без чего не выжить:</Text>
+    <Text style={styles.strong}>{c.needs.map((n) => TAG_LABEL[n]).join(', ')}.</Text>
+    {c.valued.length > c.needs.length && (
+      <>
+        <Text style={styles.sub}>Тоже пригодится:</Text>
+        <Text style={styles.text}>
+          {c.valued.filter((t) => !c.needs.includes(t)).map((n) => TAG_LABEL[n]).join(', ')}.
+        </Text>
+      </>
+    )}
+    {c.useless.length > 0 && (
+      <>
+        <Text style={styles.sub}>Здесь бесполезно:</Text>
+        <Text style={styles.text}>{c.useless.map((n) => TAG_LABEL[n]).join(', ')}.</Text>
+      </>
+    )}
+
+    <Text style={styles.sub}>Что есть в бункере:</Text>
+    {state.bunker.map((b) => (
+      <Text key={b.title} style={styles.text}>
+        <Text style={{ color: b.bonus >= 0 ? colors.good : colors.bad }}>{b.bonus >= 0 ? '+ ' : '− '}</Text>
+        {b.title}. {b.text}
+      </Text>
+    ))}
+    </View>
   );
 }
 

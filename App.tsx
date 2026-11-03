@@ -5,6 +5,9 @@ import { useFonts } from 'expo-font';
 import { Oswald_500Medium, Oswald_700Bold } from '@expo-google-fonts/oswald';
 import { PTSans_400Regular, PTSans_700Bold } from '@expo-google-fonts/pt-sans';
 import { PTMono_400Regular } from '@expo-google-fonts/pt-mono';
+import { Caveat_700Bold } from '@expo-google-fonts/caveat';
+import { LinearGradient } from 'expo-linear-gradient';
+import { DoorIntro } from './src/components/DoorIntro';
 import { DeskButton } from './src/components/Desk';
 import { secondsLeft } from './src/game/actions';
 import { newGame } from './src/game/engine';
@@ -19,7 +22,7 @@ import { GameScreen } from './src/screens/GameScreen';
 import { CreateRoomScreen, HomeScreen, JoinScreen, LocalSetupScreen, type RoomPlace } from './src/screens/MenuScreens';
 import { InfoScreen } from './src/screens/InfoScreen';
 import { RoomScreen } from './src/screens/RoomScreen';
-import { colors, images } from './src/theme';
+import { colors, images, woodShade } from './src/theme';
 
 type Screen =
   | { name: 'home' }
@@ -37,7 +40,10 @@ export default function App() {
     PTSans_400Regular,
     PTSans_700Bold,
     PTMono_400Regular,
+    Caveat_700Bold,
   });
+  // Заставка с гермодверью — один раз за запуск приложения.
+  const [intro, setIntro] = useState(true);
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [name, setName] = useState('');
   /** Сервер из ссылки-приглашения, если он не встроенный (например, сервер на компьютере). */
@@ -237,8 +243,10 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       {/* Деревянный стол лежит под всеми экранами и не прокручивается вместе с ними. */}
       <ImageBackground source={images.wood} resizeMode="cover" style={styles.root}>
+        <LinearGradient colors={woodShade} style={StyleSheet.absoluteFill} pointerEvents="none" />
         {content}
       </ImageBackground>
+      {intro && <DoorIntro onDone={() => setIntro(false)} />}
     </SafeAreaProvider>
   );
 }

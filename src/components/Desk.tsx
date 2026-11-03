@@ -1,6 +1,7 @@
-import React from 'react';
-import { ImageBackground, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import React, { useRef } from 'react';
+import { Animated, ImageBackground, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { colors, fonts, images, spacing } from '../theme';
+import { DUR, haptic } from '../ui/motion';
 
 /** Лист бумаги с тенью. Наклон задаётся через rotate. */
 export function Paper({
@@ -79,43 +80,88 @@ export function Tape({
 
 /**
  * Кнопки как на столе: основная — бумажная плашка, вторичная — рамка по дереву.
+ * При нажатии бумага опускается на 3 px и пружинит обратно, рамка заливается бумагой.
  */
 export function DeskButton({
   label,
+  sub,
   onPress,
   variant = 'primary',
   disabled,
   style,
+  arrow,
+  size,
 }: {
   label: string;
+  /** Мелкая подпись под текстом кнопки. */
+  sub?: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
-  style?: ViewStyle;
+  style?: ViewStyle | ViewStyle[];
+  /** Красная стрелка справа (главная кнопка экрана). */
+  arrow?: boolean;
+  size?: number;
 }) {
   const primary = variant === 'primary';
+  const press = useRef(new Animated.Value(0)).current;
+  const to = (v: number, ms: number) =>
+    Animated.timing(press, { toValue: v, duration: ms, useNativeDriver: false }).start();
+  const text = (
+    <View style={[styles.btnInner, (arrow || sub) && styles.btnInnerRow]}>
+      <View style={(arrow || sub) && styles.btnTextCol}>
+        <Text
+          style={[styles.btnText, primary && styles.btnTextPrimary, size ? { fontSize: size } : null, (arrow || sub) && styles.btnTextLeft]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+        >
+          {label}
+        </Text>
+        {sub ? <Text style={[styles.btnSub, !primary && styles.btnSubWood]}>{sub}</Text> : null}
+      </View>
+      {arrow ? <Text style={styles.btnArrow}>→</Text> : null}
+    </View>
+  );
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        haptic('light');
+        onPress();
+      }}
+      onPressIn={() => to(1, DUR.press)}
+      onPressOut={() => to(0, DUR.pressUp)}
       disabled={disabled}
       accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.btn,
-        primary ? styles.btnPrimary : styles.btnSecondary,
-        pressed && !disabled && styles.btnPressed,
-        disabled && styles.btnDisabled,
-        style,
-      ]}
+      accessibilityState={{ disabled: !!disabled }}
+      style={[disabled && styles.btnDisabled, style as any]}
     >
-      {primary ? (
-        <ImageBackground source={images.paper} resizeMode="repeat" style={styles.btnFill} imageStyle={styles.btnImage}>
-          <Text style={[styles.btnText, styles.btnTextPrimary]}>{label}</Text>
-        </ImageBackground>
-      ) : (
-        <View style={styles.btnFill}>
-          <Text style={styles.btnText}>{label}</Text>
-        </View>
-      )}
+      <Animated.View
+        style={[
+          styles.btn,
+          primary ? styles.btnPrimary : styles.btnSecondary,
+          {
+            transform: [{ translateY: press.interpolate({ inputRange: [0, 1], outputRange: [0, 3] }) }],
+          },
+          primary && {
+            shadowOpacity: press.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.15] }),
+            elevation: press.interpolate({ inputRange: [0, 1], outputRange: [6, 1] }),
+          },
+        ]}
+      >
+        {primary ? (
+          <ImageBackground source={images.paper} resizeMode="repeat" style={styles.btnFill} imageStyle={styles.btnImage}>
+            {text}
+          </ImageBackground>
+        ) : (
+          <View style={styles.btnFill}>
+            <Animated.View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, styles.btnFlash, { opacity: press.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }) }]}
+            />
+            {text}
+          </View>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -164,28 +210,36 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  btn: { minHeight: 52, borderRadius: 3, overflow: 'hidden' },
+  btn: { minHeight: 54, borderRadius: 3, overflow: 'hidden' },
   btnPrimary: {
     elevation: 6,
     shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 4 },
     backgroundColor: colors.paper,
   },
-  btnSecondary: { borderWidth: 2, borderColor: colors.onWood },
-  btnPressed: { opacity: 0.75 },
+  btnSecondary: { borderWidth: 2, borderColor: colors.onWood, backgroundColor: 'rgba(20, 12, 6, 0.35)' },
+  btnFlash: { backgroundColor: colors.paper },
   btnDisabled: { opacity: 0.4 },
-  btnFill: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  btnFill: { flexGrow: 1, minHeight: 54, justifyContent: 'center', paddingHorizontal: 16 },
+  btnInner: { alignItems: 'center', justifyContent: 'center' },
+  btnInnerRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  btnTextCol: { flex: 1 },
   btnImage: { borderRadius: 3 },
   btnText: {
     fontFamily: fonts.display,
-    fontSize: 18,
-    letterSpacing: 1.5,
+    fontSize: 17,
+    letterSpacing: 1.4,
     color: colors.onWood,
+    textAlign: 'center',
     textTransform: 'uppercase',
   },
+  btnTextLeft: { textAlign: 'left', fontSize: 20, letterSpacing: 1.5 },
   btnTextPrimary: { color: colors.ink },
+  btnSub: { fontFamily: fonts.body, fontSize: 13, color: colors.inkSoft },
+  btnSubWood: { color: colors.onWoodSoft },
+  btnArrow: { fontFamily: fonts.display, fontSize: 24, color: colors.stamp, marginLeft: spacing.md },
 
   woodHeading: {
     fontFamily: fonts.display,

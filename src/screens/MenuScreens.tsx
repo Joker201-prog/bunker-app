@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DeskButton, Paper, Stamp, Tape } from '../components/Desk';
+import { DoorSketch } from '../components/DoorSketch';
 import { MAX_PLAYERS, MIN_PLAYERS, seatsFor } from '../game/engine';
 import type { HostMode, RoomSettings } from '../game/room';
-import { colors, fonts, spacing } from '../theme';
+import { colors, fonts, images, spacing } from '../theme';
+import { DropIn, StampHit } from '../ui/anim';
 
 function seatsWord(n: number): string {
   if (n % 10 === 1 && n % 100 !== 11) return 'место';
@@ -64,34 +66,130 @@ export function HomeScreen({
   onLocal: () => void;
   onInfo: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const sketchW = Math.min(width - 2 * 22 - 18 - 40, 300);
   return (
-    <MenuLayout>
-      <Text style={styles.title}>«Убежище»</Text>
-      <Text style={styles.lead}>
-        Мест в бункере вдвое меньше, чем людей у двери. Докажите, что вы нужнее остальных.
+    <ScrollView
+      contentContainerStyle={[home.container, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 24 }]}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={home.caseRow}>
+        <Text style={home.caseText}>ДЕЛО № 042</Text>
+        <Text style={home.caseText}>ДЛЯ СЛУЖЕБНОГО ПОЛЬЗОВАНИЯ</Text>
+      </View>
+
+      <DropIn rotate="-3deg" style={home.polaroidWrap}>
+        <View style={home.polaroid}>
+          <DoorSketch width={sketchW} />
+          <Text style={home.caption}>схема входа, лист 1</Text>
+        </View>
+        <Image source={images.tape} style={home.tape} resizeMode="stretch" />
+      </DropIn>
+
+      <Text style={home.title} accessibilityRole="header">
+        УБЕЖИЩЕ
       </Text>
+      <Text style={home.lead}>Мест в бункере вдвое меньше, чем людей у двери. Докажите, что вы нужнее.</Text>
 
-      <Paper rotate="-1deg" style={styles.form}>
-        <Stamp label="Заявка на место" size={17} rotate="-4deg" />
-        <Text style={[styles.label, styles.gapTop]}>Фамилия, имя:</Text>
-        <TextInput
-          value={name}
-          onChangeText={onName}
-          placeholder="как вас называть"
-          placeholderTextColor={colors.inkSoft}
-          style={styles.input}
-          maxLength={16}
-        />
-      </Paper>
+      <DropIn index={1} rotate="-1deg" style={home.formWrap}>
+        <Paper padded={false}>
+          <View style={home.form}>
+            <View style={home.formHead}>
+              <StampHit label="Заявка на место" color={colors.stamp} size={15} rotate="-3deg" />
+              <Text style={home.formNo}>форма 7-Б</Text>
+            </View>
+            <Text style={home.label}>Фамилия, имя:</Text>
+            <TextInput
+              value={name}
+              onChangeText={onName}
+              placeholder="как вас называть"
+              placeholderTextColor={colors.paperLine}
+              style={home.nameInput}
+              maxLength={16}
+              accessibilityLabel="Фамилия, имя"
+            />
+          </View>
+        </Paper>
+      </DropIn>
 
-      {resumeCode && <DeskButton label={`Вернуться в комнату ${resumeCode}`} onPress={onResume} style={styles.btn} />}
-      <DeskButton label="Создать комнату" onPress={onCreate} style={styles.btn} />
-      <DeskButton label="Войти по коду" onPress={onJoin} style={styles.btn} />
-      <DeskButton label="Игра с ботами" variant="secondary" onPress={onLocal} style={styles.btn} />
-      <DeskButton label="Информация" variant="secondary" onPress={onInfo} style={styles.btn} />
-    </MenuLayout>
+      <View style={home.spacer} />
+
+      {resumeCode && (
+        <DeskButton label={`Вернуться в комнату ${resumeCode}`} variant="secondary" onPress={onResume} style={home.resume} />
+      )}
+      <DeskButton label="Создать комнату" sub="Wi-Fi или интернет, вы — ведущий" arrow onPress={onCreate} />
+      <View style={home.twoCols}>
+        <DeskButton label="Войти по коду" variant="secondary" size={16} onPress={onJoin} style={home.col} />
+        <DeskButton label="Игра с ботами" variant="secondary" size={16} onPress={onLocal} style={home.col} />
+      </View>
+      <Pressable onPress={onInfo} accessibilityRole="button" hitSlop={8} style={home.infoLink}>
+        <Text style={home.infoText}>Картотека: события и карты</Text>
+      </Pressable>
+    </ScrollView>
   );
 }
+
+const home = StyleSheet.create({
+  container: { flexGrow: 1, paddingHorizontal: 22 },
+  caseRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  caseText: { fontFamily: fonts.type, fontSize: 11, letterSpacing: 1, color: colors.onWoodSoft },
+  polaroidWrap: { alignSelf: 'center', marginTop: 26 },
+  polaroid: {
+    backgroundColor: colors.paperWhite,
+    padding: 9,
+    paddingBottom: 6,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.55,
+    shadowRadius: 11,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  caption: { fontFamily: fonts.hand, fontSize: 19, color: '#3a4f7a', textAlign: 'right', marginTop: 4 },
+  tape: { position: 'absolute', top: -14, alignSelf: 'center', width: 120, height: 30, opacity: 0.92, transform: [{ rotate: '4deg' }] },
+  title: {
+    marginTop: 22,
+    fontFamily: fonts.display,
+    fontSize: 54,
+    lineHeight: 60,
+    letterSpacing: 4,
+    textAlign: 'center',
+    color: colors.onWoodBright,
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowRadius: 8,
+    textShadowOffset: { width: 0, height: 3 },
+  },
+  lead: { marginTop: 10, marginHorizontal: 8, fontFamily: fonts.body, fontSize: 15, lineHeight: 21, textAlign: 'center', color: colors.paper },
+  formWrap: { marginTop: 20 },
+  form: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16 },
+  formHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  formNo: { fontFamily: fonts.type, fontSize: 12, color: colors.inkSoft },
+  label: { marginTop: 12, fontFamily: fonts.type, fontSize: 13, color: colors.inkSoft },
+  nameInput: {
+    marginTop: 2,
+    borderBottomWidth: 1.5,
+    borderBottomColor: colors.ink,
+    fontFamily: fonts.hand,
+    fontSize: 30,
+    lineHeight: 36,
+    color: colors.stampBlue,
+    paddingHorizontal: 2,
+    paddingVertical: 0,
+  },
+  spacer: { flexGrow: 1, minHeight: 24 },
+  resume: { marginBottom: 10 },
+  twoCols: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  col: { flex: 1 },
+  infoLink: { alignSelf: 'center', marginTop: 14, minHeight: 44, justifyContent: 'center' },
+  infoText: {
+    fontFamily: fonts.type,
+    fontSize: 14,
+    color: colors.onWood,
+    borderBottomWidth: 1,
+    borderStyle: 'dashed',
+    borderBottomColor: 'rgba(234, 220, 191, 0.6)',
+  },
+});
 
 /* ---------------- Игра с ботами ---------------- */
 

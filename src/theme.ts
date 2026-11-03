@@ -6,13 +6,18 @@ export const colors = {
   wood: '#2b1d13', // запасной фон под текстурой дерева
   onWood: '#eadcbf', // текст и рамки прямо на дереве
   onWoodMuted: '#b9a786',
+  onWoodSoft: '#c9b896', // приглушённый текст на дереве
+  onWoodBright: '#f0e4c8',
   paper: '#e2d3b2',
+  paperWhite: '#f4efe4', // рамка фото-«полароида»
   paperLine: '#b9a67f',
   ink: '#2a241d',
-  inkSoft: '#62574a',
+  inkSoft: '#5c5144', // контраст на бумаге не ниже 4,5:1
   redaction: '#1c1915',
   stamp: '#a8281f', // красная печать
-  stampBlue: '#2c4677', // синяя печать
+  stampDark: '#b8241a', // печать «Против» и «Выбыл»
+  stampBlue: '#2c4677', // синяя печать, карандаш
+  amber: '#e0a43a', // лампа: текущий раунд, места, таймер, чей ход
   good: '#3d6a2c', // зелёные чернила
   bad: '#a8281f',
   tapeInk: '#1f1b17',
@@ -24,7 +29,11 @@ export const fonts = {
   type: 'PTMono_400Regular', // машинопись
   body: 'PTSans_400Regular',
   bold: 'PTSans_700Bold',
+  hand: 'Caveat_700Bold', // рукописные заметки и имя в заявке
 };
+
+/** Затемнение дерева сверху вниз поверх текстуры. */
+export const woodShade = ['rgba(18,10,5,0.38)', 'rgba(18,10,5,0.62)'] as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 

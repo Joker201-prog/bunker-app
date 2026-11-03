@@ -35,6 +35,8 @@ React Native (Expo) + TypeScript. Два режима:
 - `src/game/room.ts` — лобби, выбор и передача роли ведущего.
 - `src/server/` — сервер комнат (общий для телефона и компьютера), HTTP поверх TCP, коды комнат в Wi-Fi.
 - `src/net/` — связь с сервером, поиск комнаты в сети, ссылки-приглашения (`invite.ts`); `src/hooks/useLocalGame.ts` — одиночная игра.
+- `src/ui/motion.ts`, `src/ui/anim.tsx` — длительности, кривые, вибрация, «Убрать анимацию»; падение листов, удар печати, мигание лампы.
+- `src/components/TableParts.tsx`, `DoorSketch.tsx`, `DoorIntro.tsx` — стол дизайна v2: сводка катастрофы, места, мини-досье, таймер-штамп, гермодверь и заставка.
 - `src/screens/` — меню, «Информация», лобби, игровой экран, финал; `src/hooks/useNotes.ts` — личные заметки; `src/components/` — досье, листы, штампы, изолента.
 - `server/server.ts` — сервер для компьютера, `server/launcher.ts` — запуск вместе с туннелем и запретом сна; `pc-server/` и `tools/make_pc_server.sh` — пакет с запуском двойным щелчком.
 - `tools/make_textures.py` — генерация текстур дерева, бумаги, силуэтов.

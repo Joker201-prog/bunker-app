@@ -1,36 +1,32 @@
-import React, { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+/**
+ * Полное досье игрока (дизайн v2): фото-«полароид», номер, 9 строк карт,
+ * кнопка-штамп «РАСКРЫТЬ», бирки «раунд N», заметка карандашом.
+ */
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CARD_TEXT, KIND_LABEL, KIND_ORDER } from '../data/cards';
 import type { CardKind, Player, RevealEntry } from '../game/types';
-import { colors, fonts, hashIndex, images, spacing, tilt } from '../theme';
-import { Paper, Stamp } from './Desk';
+import { colors, fonts, images, spacing } from '../theme';
+import { DropIn, StampHit } from '../ui/anim';
+import { DUR, EASE_PAPER, haptic, isReduceMotion } from '../ui/motion';
+import { Paper } from './Desk';
+import { photoFor } from './TableParts';
 
 interface Props {
   player: Player;
   /** Номер игрока в партии, начиная с 1. */
   number: number;
-  /** Показывать скрытые карты (своя рука). */
+  /** Своё досье: видны и закрытые карты, стоит штамп «Секретно». */
+  mine?: boolean;
+  /** Показать все карты (итоговый отчёт). */
   showAll?: boolean;
-  /** Помечать скрытые карты своей руки и ставить штамп «Секретно». */
-  secretHint?: boolean;
   revealable?: CardKind[];
   onReveal?: (kind: CardKind) => void;
-  /** Игрок выбран для голосования: штамп «Против». */
-  marked?: boolean;
-  onPress?: () => void;
-  /** Журнал раскрытий партии: рядом с картой видно, в каком раунде её открыли. */
+  /** Журнал раскрытий партии: у открытой карты — бирка «раунд N». */
   revealLog?: RevealEntry[];
-  /** Сейчас ход этого игрока раскрывать карту. */
-  isTurn?: boolean;
-  /** Личная заметка о игроке (видна только на этом телефоне). Без onNote заметок нет. */
+  /** Личная заметка (видна только на этом телефоне). Без onNote заметок нет. */
   note?: string;
   onNote?: (text: string) => void;
-}
-
-function photoFor(p: Player) {
-  const set = p.photo && p.photo[0] === 'f' ? images.photos.f : images.photos.m;
-  const idx = Number(p.photo ? p.photo.slice(1) : hashIndex(p.id, set.length)) || 0;
-  return set[idx % set.length];
 }
 
 /** Полное описание карты из библиотеки. */
@@ -40,263 +36,329 @@ function showDetails(kind: CardKind, title: string, id: string | undefined) {
   Alert.alert(`${KIND_LABEL[kind]}: ${title}`, text);
 }
 
-/** Ширина «вымаранной» строки: своя для каждой карты, чтобы не выглядело как шаблон. */
-function redactionWidth(key: string): number {
-  return 70 + hashIndex(key, 90);
-}
-
-export function Dossier({
-  player,
-  number,
-  showAll,
-  secretHint,
-  revealable = [],
-  onReveal,
-  marked,
-  onPress,
-  revealLog,
-  isTurn,
-  note,
-  onNote,
-}: Props) {
-  const Wrapper: any = onPress ? Pressable : View;
+export function Dossier({ player, number, mine, showAll, revealable = [], onReveal, revealLog, note, onNote }: Props) {
   const out = !player.alive;
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(note ?? '');
+  const openCount = KIND_ORDER.filter((k) => player.revealed[k]).length;
   const openedIn: Partial<Record<CardKind, RevealEntry>> = {};
   for (const r of revealLog ?? []) if (r.playerId === player.id) openedIn[r.kind] = r;
 
-  function saveNote() {
-    setEditing(false);
-    onNote?.(draft.trim());
-  }
-
   return (
-    <Wrapper
-      onPress={onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityState={onPress ? { selected: !!marked } : undefined}
-      style={styles.wrap}
-    >
-      <Paper rotate={tilt(player.id)} style={out ? styles.outPaper : undefined}>
-        <View style={styles.head}>
-          <View style={styles.photoFrame}>
-            <Image source={photoFor(player)} style={styles.photo} />
+    <DropIn rotate="-0.5deg" style={styles.wrap}>
+      <Paper padded={false}>
+        <View style={styles.sheet}>
+          <View style={styles.head}>
+            <View style={styles.photoFrame}>
+              <Image source={photoFor(player)} style={[styles.photo, out && styles.photoOut]} />
+            </View>
+            <View style={styles.headText}>
+              <Text style={styles.number}>ИГРОК № {number}</Text>
+              <Text style={styles.name} numberOfLines={1}>
+                ({player.name})
+              </Text>
+              <Text style={styles.count}>открыто {openCount} из 9</Text>
+              {mine && !out && <StampHit label="Секретно" color={colors.stamp} size={14} rotate="-5deg" style={styles.secret} />}
+            </View>
           </View>
-          <View style={styles.headText}>
-            <Text style={styles.number}>Игрок {number}</Text>
-            <Text style={styles.name} numberOfLines={1}>
-              ({player.name}){player.isHuman && secretHint ? ' — вы' : ''}
-            </Text>
-            {isTurn && !out && <Text style={styles.turn}>Сейчас раскрывает карту</Text>}
-            {secretHint && player.alive && (
-              <Stamp label="Секретно" size={15} rotate="-6deg" style={styles.headStamp} />
-            )}
-          </View>
-        </View>
 
-        <View style={styles.fields}>
-          {KIND_ORDER.map((kind) => {
-            const card = player.cards[kind];
-            const open = player.revealed[kind];
-            const visible = open || showAll;
-            const canReveal = revealable.includes(kind);
-            const hasDetails = visible && !!card.id && !!CARD_TEXT[card.id];
-            // Нажатие: раскрыть карту (если можно) или прочитать описание.
-            // Когда всё досье нажимается (голосование), описание открывается долгим нажатием.
-            const tapDetails = hasDetails && !canReveal && !onPress;
-            const Line: any = canReveal || hasDetails ? Pressable : View;
-            return (
-              <Line
+          <View style={styles.rows}>
+            {KIND_ORDER.map((kind) => (
+              <CardRow
                 key={kind}
-                onPress={
-                  canReveal
-                    ? () => onReveal && onReveal(kind)
-                    : tapDetails
-                      ? () => showDetails(kind, card.title, card.id)
-                      : undefined
-                }
-                onLongPress={hasDetails ? () => showDetails(kind, card.title, card.id) : undefined}
-                accessibilityRole={canReveal || tapDetails ? 'button' : undefined}
-                accessibilityLabel={canReveal ? `Раскрыть: ${KIND_LABEL[kind]}` : undefined}
-                accessibilityHint={hasDetails ? 'Открывает полное описание карты' : undefined}
-                style={[styles.line, canReveal && styles.lineAction]}
-              >
-                <Text style={[styles.mark, { color: card.value > 0 ? colors.good : colors.bad }]}>
-                  {visible && card.value > 0 ? '✓' : visible && card.value < 0 ? '✗' : ' '}
-                </Text>
-                <View style={styles.lineBody}>
-                  <Text style={styles.label}>{KIND_LABEL[kind]}:</Text>
-                  {visible ? (
-                    <Text style={[styles.value, !open && styles.valueHidden]}>
-                      {card.title}
-                      {!open && secretHint ? '  (скрыто)' : ''}
-                      {open && openedIn[kind] ? (
-                        <Text style={styles.round}>
-                          {'  '}раунд {openedIn[kind]!.round}
-                          {openedIn[kind]!.auto ? ', авто' : ''}
-                        </Text>
-                      ) : null}
-                    </Text>
-                  ) : (
-                    <View style={[styles.redaction, { width: redactionWidth(player.id + kind) }]} />
-                  )}
-                  {visible && card.note ? <Text style={styles.note}>{card.note}</Text> : null}
-                </View>
-                {canReveal && <Text style={styles.reveal}>Раскрыть</Text>}
-              </Line>
-            );
-          })}
-        </View>
-
-        {onNote && (
-          <View style={styles.noteBox}>
-            {editing ? (
-              <View>
-                <TextInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Ваши мысли об этом игроке — их видите только вы"
-                  placeholderTextColor={colors.inkSoft}
-                  style={styles.noteInput}
-                  multiline
-                  maxLength={300}
-                  autoFocus
-                  onBlur={saveNote}
-                />
-                <Pressable onPress={saveNote} hitSlop={8} accessibilityRole="button" style={styles.noteDone}>
-                  <Text style={styles.noteAction}>Готово</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => {
-                  setDraft(note ?? '');
-                  setEditing(true);
-                }}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={note ? 'Изменить заметку' : 'Добавить заметку'}
-              >
-                {note ? (
-                  <Text style={styles.noteText}>
-                    <Text style={styles.noteLabel}>Заметка: </Text>
-                    {note}
-                  </Text>
-                ) : (
-                  <Text style={styles.noteAction}>✎ Добавить заметку</Text>
-                )}
-              </Pressable>
-            )}
+                kind={kind}
+                player={player}
+                mine={!!mine || !!showAll}
+                canReveal={revealable.includes(kind)}
+                onReveal={onReveal}
+                entry={openedIn[kind]}
+              />
+            ))}
           </View>
-        )}
+
+          {onNote && <NoteLine note={note} onNote={onNote} />}
+        </View>
       </Paper>
 
-      {/* Скрепка поверх листа */}
       <View pointerEvents="none" style={styles.clipWrap}>
         <Image source={images.paperclip} style={styles.clip} />
       </View>
+      {out && <StampHit label="Выбыл" size={40} rotate="-14deg" style={styles.outStamp} fill play={false} />}
+    </DropIn>
+  );
+}
 
-      {out && <Stamp label="Выбыл" size={40} rotate="-14deg" style={styles.bigStamp} />}
-      {marked && !out && <Stamp label="Против" size={34} rotate="10deg" style={styles.markStamp} />}
-    </Wrapper>
+function CardRow({
+  kind,
+  player,
+  mine,
+  canReveal,
+  onReveal,
+  entry,
+}: {
+  kind: CardKind;
+  player: Player;
+  mine: boolean;
+  canReveal: boolean;
+  onReveal?: (kind: CardKind) => void;
+  entry?: RevealEntry;
+}) {
+  const card = player.cards[kind];
+  const open = player.revealed[kind];
+  const visible = open || mine || !player.alive;
+  const hasDetails = visible && !!card.id && !!CARD_TEXT[card.id];
+
+  // Раскрытие: плашка цензуры стирается слева направо, дописывается ✓/✗, появляется бирка.
+  const wipe = useRef(new Animated.Value(1)).current;
+  const wasOpen = useRef(open);
+  const [playing, setPlaying] = useState(false);
+  const justOpened = open && !wasOpen.current;
+  if (justOpened && !isReduceMotion()) wipe.setValue(0);
+  const fresh = (justOpened || playing) && !isReduceMotion();
+  useEffect(() => {
+    const opened = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!opened) return;
+    haptic('light');
+    if (isReduceMotion()) return;
+    setPlaying(true);
+    const k = player.isHuman ? 1 : 0.5; // ходы ботов — вдвое быстрее
+    Animated.timing(wipe, { toValue: 1, duration: DUR.card * k, easing: EASE_PAPER, useNativeDriver: true }).start(() =>
+      setPlaying(false),
+    );
+  }, [open, wipe, player.isHuman]);
+
+  const mark = visible && card.value > 0 ? '✓' : visible && card.value < 0 ? '✗' : '';
+  const Line: any = hasDetails ? Pressable : View;
+  return (
+    <Line
+      onPress={hasDetails ? () => showDetails(kind, card.title, card.id) : undefined}
+      accessibilityRole={hasDetails ? 'button' : undefined}
+      accessibilityHint={hasDetails ? 'Открывает полное описание карты' : undefined}
+      style={styles.row}
+    >
+      <Animated.Text
+        style={[
+          styles.mark,
+          { color: card.value > 0 ? colors.good : colors.bad },
+          open && fresh ? { opacity: wipe.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0, 0, 1] }) } : null,
+        ]}
+      >
+        {mark}
+      </Animated.Text>
+      <View style={styles.rowBody}>
+        <Text style={styles.kind}>{KIND_LABEL[kind].toUpperCase()}</Text>
+        {visible ? (
+          <View>
+            <Text style={[styles.value, !open && styles.valueHidden]}>{card.title}</Text>
+            {visible && card.note ? <Text style={styles.cardNote}>{card.note}</Text> : null}
+            {open && fresh && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.wipe,
+                  {
+                    transformOrigin: 'right',
+                    transform: [{ scaleX: wipe.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }],
+                  } as any,
+                ]}
+              />
+            )}
+          </View>
+        ) : (
+          <View style={[styles.redaction, { width: 70 + ((kind.length * 37 + player.id.length * 11) % 90) }]} />
+        )}
+      </View>
+      {open && entry ? (
+        <Animated.Text
+          style={[
+            styles.roundChip,
+            fresh
+              ? {
+                  opacity: wipe.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0, 0, 1] }),
+                  transform: [{ translateY: wipe.interpolate({ inputRange: [0, 0.8, 1], outputRange: [4, 4, 0] }) }],
+                }
+              : null,
+          ]}
+        >
+          раунд {entry.round}
+          {entry.auto ? ', авто' : ''}
+        </Animated.Text>
+      ) : null}
+      {canReveal && onReveal ? (
+        <Pressable
+          onPress={() => onReveal(kind)}
+          accessibilityRole="button"
+          accessibilityLabel={`Раскрыть: ${KIND_LABEL[kind]}`}
+          hitSlop={6}
+          style={({ pressed }) => [styles.revealBtn, pressed && styles.revealPressed]}
+        >
+          <Text style={styles.revealText}>РАСКРЫТЬ</Text>
+        </Pressable>
+      ) : null}
+    </Line>
+  );
+}
+
+/** Заметка карандашом: сохранённая «пишется» слева направо, за текстом едет карандаш. */
+function NoteLine({ note, onNote }: { note?: string; onNote: (text: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note ?? '');
+  const [width, setWidth] = useState(0);
+  const write = useRef(new Animated.Value(1)).current;
+  const justSaved = useRef(false);
+
+  useEffect(() => {
+    if (!justSaved.current || !note || !width) return;
+    justSaved.current = false;
+    if (isReduceMotion()) return;
+    write.setValue(0);
+    Animated.timing(write, {
+      toValue: 1,
+      duration: Math.min(DUR.letterMax, note.length * DUR.letter),
+      useNativeDriver: false,
+    }).start();
+  }, [note, width, write]);
+
+  function save() {
+    setEditing(false);
+    const text = draft.trim();
+    if (text && text !== note) justSaved.current = true;
+    onNote(text);
+  }
+
+  if (editing) {
+    return (
+      <View style={styles.noteBox}>
+        <Text style={styles.pencil}>✎</Text>
+        <View style={styles.flex}>
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Ваши мысли об этом игроке — их видите только вы"
+            placeholderTextColor={colors.paperLine}
+            style={styles.noteInput}
+            multiline
+            maxLength={300}
+            autoFocus
+            onBlur={save}
+          />
+          <Pressable onPress={save} hitSlop={8} accessibilityRole="button" style={styles.noteDone}>
+            <Text style={styles.noteAction}>Готово</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={() => {
+        setDraft(note ?? '');
+        setEditing(true);
+      }}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={note ? `Заметка: ${note}. Изменить` : 'Добавить заметку'}
+      style={styles.noteBox}
+    >
+      <Text style={styles.pencil}>✎</Text>
+      {note ? (
+        <View style={styles.flex} onLayout={(e: any) => setWidth(e.nativeEvent.layout.width)}>
+          <Animated.View
+            style={{
+              overflow: 'hidden',
+              width: width ? write.interpolate({ inputRange: [0, 1], outputRange: [0, width] }) : undefined,
+            }}
+          >
+            <Text style={[styles.noteText, width ? { width } : null]}>{note}</Text>
+          </Animated.View>
+        </View>
+      ) : (
+        <Text style={styles.noteAdd}>Добавить заметку</Text>
+      )}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 18, marginBottom: spacing.lg },
-  outPaper: { opacity: 0.92 },
-  head: { flexDirection: 'row', gap: spacing.md },
+  flex: { flex: 1 },
+  wrap: { marginTop: 22, marginBottom: spacing.lg },
+  sheet: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 12 },
+  head: { flexDirection: 'row', gap: 12 },
   photoFrame: {
-    backgroundColor: '#f1ece0',
+    backgroundColor: colors.paperWhite,
     padding: 5,
-    paddingBottom: 12,
+    paddingBottom: 14,
     transform: [{ rotate: '-3deg' }],
     elevation: 3,
     shadowColor: '#000',
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
   },
-  photo: { width: 84, height: 101 },
-  headText: { flex: 1, paddingTop: 2 },
-  number: {
-    fontFamily: fonts.display,
-    fontSize: 24,
-    lineHeight: 30,
-    color: colors.ink,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
+  photo: { width: 68, height: 80 },
+  photoOut: { filter: [{ grayscale: 1 }] } as any,
+  headText: { flex: 1 },
+  number: { fontFamily: fonts.display, fontSize: 24, lineHeight: 28, letterSpacing: 1, color: colors.ink },
   name: { fontFamily: fonts.type, fontSize: 15, color: colors.ink },
-  headStamp: { marginTop: spacing.sm },
-  turn: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.xs,
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.paper,
-    backgroundColor: colors.stampBlue,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  count: { marginTop: 6, fontFamily: fonts.type, fontSize: 12, color: colors.inkSoft },
+  secret: { marginTop: 6 },
+
+  rows: { marginTop: 12 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 46,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.paperLine,
+  },
+  mark: { width: 16, textAlign: 'center', fontFamily: fonts.bold, fontSize: 15 },
+  rowBody: { flex: 1, minWidth: 0, paddingVertical: 3 },
+  kind: { fontFamily: fonts.type, fontSize: 11, letterSpacing: 0.5, color: colors.inkSoft },
+  value: { fontFamily: fonts.body, fontSize: 15, lineHeight: 19, color: colors.ink },
+  valueHidden: { color: colors.inkSoft },
+  cardNote: { fontFamily: fonts.type, fontSize: 12, lineHeight: 16, color: colors.inkSoft, marginTop: 2 },
+  wipe: { position: 'absolute', left: 0, right: 0, top: 1, height: 17, backgroundColor: colors.redaction },
+  redaction: { height: 14, marginTop: 3, backgroundColor: colors.redaction, transform: [{ skewX: '-6deg' }] },
+  roundChip: {
+    fontFamily: fonts.type,
+    fontSize: 11,
+    color: colors.inkSoft,
+    borderWidth: 1,
+    borderColor: '#8f7f62',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  revealBtn: {
+    minHeight: 34,
+    paddingHorizontal: 9,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.stamp,
     borderRadius: 2,
   },
-  round: { fontFamily: fonts.type, fontSize: 11, color: colors.inkSoft },
-  noteBox: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.paperLine, paddingTop: spacing.sm },
-  noteLabel: { fontFamily: fonts.bold, color: colors.stampBlue },
-  noteText: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.stampBlue },
-  noteAction: { fontFamily: fonts.type, fontSize: 14, color: colors.stampBlue, textDecorationLine: 'underline' },
+  revealPressed: { backgroundColor: 'rgba(168, 40, 31, 0.12)', transform: [{ translateY: 2 }] },
+  revealText: { fontFamily: fonts.display, fontSize: 12, letterSpacing: 1.2, color: colors.stamp },
+
+  noteBox: { marginTop: 8, flexDirection: 'row', gap: 8, alignItems: 'flex-start', minHeight: 40 },
+  pencil: { fontSize: 18, lineHeight: 26, color: colors.stampBlue },
+  noteText: { fontFamily: fonts.hand, fontSize: 21, lineHeight: 23, color: colors.stampBlue },
+  noteAdd: { fontFamily: fonts.hand, fontSize: 20, lineHeight: 26, color: colors.stampBlue, opacity: 0.75 },
   noteInput: {
-    fontFamily: fonts.type,
-    fontSize: 14,
-    lineHeight: 20,
+    fontFamily: fonts.hand,
+    fontSize: 21,
+    lineHeight: 24,
     color: colors.stampBlue,
     borderBottomWidth: 1,
     borderBottomColor: colors.stampBlue,
     minHeight: 44,
-    paddingVertical: 4,
+    paddingVertical: 2,
     textAlignVertical: 'top',
   },
-  noteDone: { alignSelf: 'flex-end', marginTop: spacing.xs },
+  noteDone: { alignSelf: 'flex-end', marginTop: spacing.xs, minHeight: 32, justifyContent: 'center' },
+  noteAction: { fontFamily: fonts.type, fontSize: 14, color: colors.stampBlue, textDecorationLine: 'underline' },
 
-  fields: { marginTop: spacing.md },
-  line: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.paperLine,
-  },
-  lineAction: { backgroundColor: 'rgba(168, 40, 31, 0.07)' },
-  mark: { width: 16, fontFamily: fonts.bold, fontSize: 15, lineHeight: 20 },
-  lineBody: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6 },
-  label: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.inkSoft },
-  value: { fontFamily: fonts.type, fontSize: 14, lineHeight: 20, color: colors.ink, flexShrink: 1 },
-  valueHidden: { color: colors.inkSoft },
-  note: { width: '100%', fontFamily: fonts.type, fontSize: 12, lineHeight: 16, color: colors.inkSoft, marginTop: 2 },
-  redaction: { height: 14, backgroundColor: colors.redaction, marginTop: 3, transform: [{ skewX: '-6deg' }] },
-  reveal: {
-    fontFamily: fonts.display,
-    fontSize: 13,
-    color: colors.stamp,
-    borderWidth: 2,
-    borderColor: colors.stamp,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    marginLeft: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-
-  clipWrap: { position: 'absolute', top: -16, left: 26, zIndex: 10, elevation: 12 },
+  clipWrap: { position: 'absolute', top: -18, left: 30, zIndex: 10, elevation: 12 },
   clip: { width: 22, height: 60 },
-  bigStamp: {
-    position: 'absolute',
-    top: '38%',
-    alignSelf: 'center',
-    zIndex: 11,
-    elevation: 13,
-    backgroundColor: 'rgba(226, 211, 178, 0.35)',
-  },
-  markStamp: { position: 'absolute', top: 30, right: 14, zIndex: 11, elevation: 13 },
+  outStamp: { position: 'absolute', top: '40%', alignSelf: 'center', zIndex: 11, elevation: 13 },
 });
