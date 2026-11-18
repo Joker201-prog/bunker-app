@@ -6,6 +6,7 @@ COPY server ./server
 COPY src/game ./src/game
 COPY src/data ./src/data
 COPY src/server ./src/server
+COPY src/net/invite.ts ./src/net/invite.ts
 RUN cd server && tsc -p tsconfig.json --typeRoots /app/node_modules/@types
 
 FROM node:22-alpine

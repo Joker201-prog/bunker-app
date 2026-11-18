@@ -72,7 +72,9 @@ jobs:
           path: ubezhishe-${{ github.run_number }}.apk
 
       - name: Prepare release notes
+        id: release_notes
         run: |
+          echo "title=$(head -n 1 release-notes.md | sed 's/^# //')" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_name }}" = "main" ]; then
             sed "s/{{BUILD}}/${{ github.run_number }}/g; s/{{TAG}}/build-${{ github.run_number }}/g" release-notes.md > release-body.md
           else
@@ -88,7 +90,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Убежище, сборка ${{ github.run_number }}
+          name: ${{ steps.release_notes.outputs.title }}
           body_path: release-body.md
           files: ubezhishe-${{ github.run_number }}.apk
 
